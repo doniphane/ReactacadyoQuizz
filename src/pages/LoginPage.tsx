@@ -6,9 +6,9 @@ interface LoginPageProps {
   onLogin?: (data: { email: string; password: string }) => void;
 }
 
-// Composant principal de la page de connexion
+
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
-  // Fonction de gestion de la soumission du formulaire
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -25,9 +25,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   };
 
     return (
-    <div className="min-h-screen flex">
-      {/* Section gauche - Branding (50% de la largeur) */}
-      <div className="w-1/2 flex items-center justify-end pr-16" style={{ backgroundColor: '#18191D' }}>
+    <div className="min-h-screen flex" style={{ backgroundColor: '#18191D' }}>
+
+      <div className="hidden xl:flex w-1/2 items-center justify-end pr-16">
         <div className="text-center">
           <h1 className="text-5xl font-bold mb-4">
             <span className="text-white">Acadyo</span>
@@ -37,10 +37,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         </div>
       </div>
 
-
-      <div className="w-1/2 flex items-center justify-start pl-16" style={{ backgroundColor: '#18191D' }}>
+      <div className="w-full xl:w-1/2 flex items-center justify-center p-6 xl:justify-start xl:pl-16">
         <div className="w-full max-w-md bg-white rounded-lg border-2 border-amber-500 shadow-2xl p-8">
-  
+
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               Connexion
@@ -48,10 +47,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             <p className="text-gray-600">Accédez à votre espace</p>
           </div>
 
-    
           <LoginForm onSubmit={handleSubmit} className="space-y-4" />
         </div>
       </div>
+      
     </div>
   );
 };
