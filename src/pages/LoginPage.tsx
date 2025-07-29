@@ -4,10 +4,11 @@ import { LoginForm } from "@/components/login-form";
 
 interface LoginPageProps {
   onLogin?: (data: { email: string; password: string }) => void;
+  onNavigateToRegister?: () => void;
 }
 
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister }) => {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -47,7 +48,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             <p className="text-gray-600">Accédez à votre espace</p>
           </div>
 
-          <LoginForm onSubmit={handleSubmit} className="space-y-4" />
+          <LoginForm onSubmit={handleSubmit} onNavigateToRegister={onNavigateToRegister} className="space-y-4" />
         </div>
       </div>
       

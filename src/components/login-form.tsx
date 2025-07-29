@@ -3,10 +3,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+interface LoginFormProps extends React.ComponentProps<"form"> {
+  onNavigateToRegister?: () => void;
+}
+
 export function LoginForm({
   className,
+  onNavigateToRegister,
   ...props
-}: React.ComponentProps<"form">) {
+}: LoginFormProps) {
   return (
     <form className={cn("flex flex-col gap-6", className)} {...props}>
    
@@ -45,9 +50,13 @@ export function LoginForm({
       </div>
       <div className="text-center text-sm text-black font-bold">
         Pas de compte ?{" "}
-        <a href="#" className="underline underline-offset-4  text-amber-500">
+        <button
+          type="button"
+          onClick={onNavigateToRegister}
+          className="underline underline-offset-4 text-amber-500 hover:text-amber-600"
+        >
           S'inscrire
-        </a>
+        </button>
       </div>
     </form>
   )
