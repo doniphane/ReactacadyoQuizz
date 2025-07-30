@@ -1,17 +1,13 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { RegisterForm } from "@/components/register-form";
 import { UserApiService, ApiError } from "@/lib/api";
 import type { UserCreateRequest, UserResponse } from "@/types/User";
 
-type RegisterPageProps = {
-  onRegisterSuccess?: (message: string) => void;
-  onNavigateToLogin?: () => void;
-};
 
-const RegisterPage: React.FC<RegisterPageProps> = ({
-  onRegisterSuccess,
-  onNavigateToLogin,
-}) => {
+const RegisterPage: React.FC = () => {
+  // Hook pour la navigation avec React Router
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -25,9 +21,10 @@ const RegisterPage: React.FC<RegisterPageProps> = ({
     const message = `Compte créé avec succès ! Bienvenue !`;
     setSuccessMessage(message);
 
-    if (onRegisterSuccess) {
-      onRegisterSuccess(message);
-    }
+
+    setTimeout(() => {
+      navigate('/login');
+    }, 2000);
   };
 
   const handleApiErrors = (error: ApiError) => {
@@ -74,9 +71,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({
   };
 
   const goToLoginPage = () => {
-    if (onNavigateToLogin) {
-      onNavigateToLogin();
-    }
+    navigate('/login');
   };
 
   const renderErrorMessage = () => {
@@ -107,12 +102,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({
             <span className="text-white">Acadyo</span>
             <span className="text-amber-500"> Quiz</span>
           </h1>
-          <p className="text-white text-xl">
-            Rejoignez notre plateforme de quiz
-          </p>
-          <p className="text-gray-300 text-sm mt-2">
-            Créez, partagez et participez à des quiz interactifs
-          </p>
+        
         </div>
       </div>
 

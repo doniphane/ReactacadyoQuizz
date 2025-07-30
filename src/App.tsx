@@ -1,53 +1,53 @@
 
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-
-
-type CurrentPage = 'login' | 'register';
+import DashboardPage from './pages/DashboardPage';
+import StudentPage from './pages/StudentPage';
+import ProtectedRoute from './components/ProtectedRoute';
+import { useAuthStore } from './store';
 
 function App() {
 
-  const [currentPage, setCurrentPage] = useState<CurrentPage>('login');
-
- 
-  const handleLogin = (data: { email: string; password: string }) => {
-    console.log('Connexion réussie avec:', data);
-
-  };
+  const { checkAuth } = useAuthStore();
 
 
-  const handleRegisterSuccess = (message: string) => {
-    console.log('Inscription réussie:', message);
-
-    setCurrentPage('login');
-  };
-
-  const navigateToLogin = () => {
-    setCurrentPage('login');
-  };
-
-
-  const navigateToRegister = () => {
-    setCurrentPage('register');
-  };
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   return (
     <div className="App">
+
+      <Routes>
+
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
+        <Route path="/login" element={<LoginPage />} />
+        
    
-      {currentPage === 'login' && (
-        <LoginPage 
-          onLogin={handleLogin}
-          onNavigateToRegister={navigateToRegister}
+        <Route path="/register" element={<RegisterPage />} />
+        
+
+        <Route 
+          path="/admin-dashboard" 
+          element={
+            <ProtectedRoute requiredRole="ROLE_ADMIN">
+              <DashboardPage />
+            </ProtectedRoute>
+          } 
         />
-      )}
       
-      {currentPage === 'register' && (
-        <RegisterPage 
-          onRegisterSuccess={handleRegisterSuccess}
-          onNavigateToLogin={navigateToLogin}
+        <Route 
+          path="/student" 
+          element={
+            <ProtectedRoute requiredRole="ROLE_USER">
+              <StudentPage />
+            </ProtectedRoute>
+          } 
         />
-      )}
+      </Routes>
     </div>
   );
 }

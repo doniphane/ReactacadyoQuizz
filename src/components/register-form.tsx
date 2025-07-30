@@ -2,9 +2,14 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import type { UserCreateRequest } from "@/types/User";
-
 
 interface RegisterFormProps {
   onSubmit: (userData: UserCreateRequest) => void;
@@ -12,43 +17,36 @@ interface RegisterFormProps {
   className?: string;
 }
 
-
 interface FormState {
   email: string;
   password: string;
 }
-
 
 interface FormErrors {
   email?: string;
   password?: string;
 }
 
-const RegisterForm: React.FC<RegisterFormProps> = ({ 
-  onSubmit, 
-  isLoading = false, 
-  className = "" 
+const RegisterForm: React.FC<RegisterFormProps> = ({
+  onSubmit,
+  isLoading = false,
+  className = "",
 }) => {
-
   const [formData, setFormData] = useState<FormState>({
-    email: '',
-    password: ''
+    email: "",
+    password: "",
   });
-
 
   const [errors, setErrors] = useState<FormErrors>({});
 
- 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
-
 
     if (!formData.email.trim()) {
       newErrors.email = "L'email est requis";
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = "L'email n'est pas valide";
     }
-
 
     if (!formData.password) {
       newErrors.password = "Le mot de passe est requis";
@@ -62,36 +60,31 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
   };
 
   const handleInputChange = (field: keyof FormState, value: string) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
 
-
     if (errors[field]) {
-      setErrors(prev => ({
+      setErrors((prev) => ({
         ...prev,
-        [field]: undefined
+        [field]: undefined,
       }));
     }
   };
 
-
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
 
     if (!validateForm()) {
       return;
     }
 
-
     const userData: UserCreateRequest = {
       email: formData.email.trim(),
-      password: formData.password
+      password: formData.password,
     };
 
- 
     onSubmit(userData);
   };
 
@@ -105,14 +98,13 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-     
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               type="email"
               value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
+              onChange={(e) => handleInputChange("email", e.target.value)}
               placeholder="votre.email@exemple.com"
               disabled={isLoading}
               className={errors.email ? "border-red-500" : ""}
@@ -128,8 +120,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
               id="password"
               type="password"
               value={formData.password}
-              onChange={(e) => handleInputChange('password', e.target.value)}
-              placeholder="••••••••"
+              onChange={(e) => handleInputChange("password", e.target.value)}
+              placeholder="......."
               disabled={isLoading}
               className={errors.password ? "border-red-500" : ""}
             />
@@ -138,9 +130,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
             )}
           </div>
 
-      
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             className="w-full bg-amber-500 hover:bg-amber-600"
             disabled={isLoading}
           >
@@ -152,4 +143,4 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
   );
 };
 
-export { RegisterForm }; 
+export { RegisterForm };
