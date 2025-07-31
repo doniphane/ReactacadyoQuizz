@@ -2,7 +2,18 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RegisterForm } from "@/components/register-form";
 import { UserApiService, ApiError } from "@/lib/api";
-import type { UserCreateRequest, UserResponse } from "@/types/User";
+
+// Types simples pour correspondre au fichier api.ts simplifié
+interface NewUser {
+  email: string;
+  password: string;
+}
+
+interface User {
+  id: number;
+  email: string;
+  roles: string[];
+}
 
 // Composant de la page d'inscription avec React Router
 const RegisterPage: React.FC = () => {
@@ -41,7 +52,7 @@ const RegisterPage: React.FC = () => {
     setErrorMessage("Une erreur est survenue. Veuillez réessayer plus tard.");
   };
 
-  const handleRegisterSubmit = async (userData: UserCreateRequest) => {
+  const handleRegisterSubmit = async (userData: NewUser) => {
     console.log("Début de l'inscription...");
 
     resetAllMessages();
@@ -50,9 +61,7 @@ const RegisterPage: React.FC = () => {
 
     try {
       console.log("Appel de l'API pour créer l'utilisateur");
-      const createdUser: UserResponse = await UserApiService.createUser(
-        userData
-      );
+      const createdUser: User = await UserApiService.createUser(userData);
 
       console.log("Utilisateur créé avec succès:", createdUser);
       showSuccessMessage();
@@ -102,7 +111,6 @@ const RegisterPage: React.FC = () => {
             <span className="text-white">Acadyo</span>
             <span className="text-amber-500"> Quiz</span>
           </h1>
-        
         </div>
       </div>
 

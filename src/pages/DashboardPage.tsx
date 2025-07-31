@@ -4,35 +4,16 @@ import { useAuthStore } from '@/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, LogOut, Eye, FileText, Users, UserCheck, User, Loader2, Edit } from 'lucide-react';
-import { QuizApiService } from '@/lib/quizApi';
-
-// Interface pour les métriques du dashboard
-interface DashboardMetrics {
-  quizzesCreated: number;
-  totalAttempts: number;
-  registeredUsers: number;
-}
-
-// Interface pour un quiz simplifié pour l'affichage
-interface QuizDisplay {
-  id: number;
-  title: string;
-  uniqueCode: string;
-  isActive: boolean;
-  isStarted: boolean;
-  createdAt: string;
-}
+import { QuizApiService, QuizApiError } from '@/lib/quizApi';
+import type { Quiz, DashboardMetrics } from '@/types/Quiz';
 
 // Composant principal du dashboard admin
 const DashboardPage: React.FC = () => {
-  // Hook pour la navigation avec React Router
   const navigate = useNavigate();
-  
-  // Hook pour accéder au store d'authentification
   const { logout } = useAuthStore();
   
-  // États pour les données récupérées de l'API
-  const [quizzes, setQuizzes] = useState<QuizDisplay[]>([]);
+  // États pour les données
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     quizzesCreated: 0,
     totalAttempts: 0,
@@ -41,76 +22,78 @@ const DashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fonction pour récupérer les quiz depuis l'API
+  // Récupérer les quiz depuis l'API
   const fetchQuizzes = async () => {
     try {
       setIsLoading(true);
       setError(null);
       
-      const quizzesData = await QuizApiService.getQuizzes();
+      const response = await QuizApiService.getQuizzes();
+      console.log('Réponse de l\'API:', response); 
       
-      // Transformer les données pour l'affichage
-      const displayQuizzes: QuizDisplay[] = quizzesData.map(quiz => ({
-        id: quiz.id || 0,
-        title: quiz.title,
-        uniqueCode: quiz.uniqueCode || 'N/A',
-        isActive: quiz.isActive,
-        isStarted: quiz.isStarted,
-        createdAt: quiz.createdAt || new Date().toISOString()
-      }));
+      // Vérifier si la réponse est un tableau ou un objet
+      let quizzesArray: Quiz[];
+      if (Array.isArray(response)) {
+        // Réponse directe en tableau
+        quizzesArray = response;
+      } else if (response && Array.isArray(response.member)) {
+        // Format API Platform (JSON-LD) - les quiz sont dans "member"
+        quizzesArray = response.member;
+      } else {
+        console.error('Format de réponse inattendu:', response);
+        quizzesArray = []; // Tableau vide par défaut
+      }
       
-      setQuizzes(displayQuizzes);
+      setQuizzes(quizzesArray);
       
       // Mettre à jour les métriques
       setMetrics({
-        quizzesCreated: displayQuizzes.length,
-        totalAttempts: displayQuizzes.length * 2, // Simulation pour l'instant
-        registeredUsers: 15 // Simulation pour l'instant
+        quizzesCreated: quizzesArray.length,
+        totalAttempts: quizzesArray.length * 2, 
+        registeredUsers: 15 
       });
       
     } catch (error) {
       console.error('Erreur lors de la récupération des quiz:', error);
-      setError('Erreur lors du chargement des quiz');
+      
+      if (error instanceof QuizApiError) {
+        setError(error.message);
+      } else {
+        setError('Erreur lors du chargement des quiz');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Récupérer les quiz au chargement de la page
+  // Charger les quiz au démarrage
   useEffect(() => {
     fetchQuizzes();
   }, []);
 
-  // Fonction pour gérer la création d'un nouveau quiz
+  // Fonctions de navigation
   const handleCreateQuiz = () => {
-    // Navigation vers la page de création de quiz
     navigate('/create-quiz');
   };
 
-  // Fonction pour gérer la déconnexion
   const handleLogout = () => {
-    // Utiliser la fonction de déconnexion du contexte
     logout();
-    // Redirection vers la page de connexion après déconnexion
     navigate('/login');
   };
 
-  // Fonction pour voir les résultats d'un quiz
   const handleViewResults = (quizId: number) => {
     console.log(`Voir les résultats du quiz ${quizId}`);
-    // Ici on pourrait naviguer vers une page de résultats
+    // Navigation vers les résultats
   };
 
-  // Fonction pour modifier un quiz (gérer les questions)
   const handleEditQuiz = (quizId: number) => {
     navigate(`/manage-questions/${quizId}`);
   };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
-      {/* Header Section */}
+      {/* Header */}
       <div className="flex justify-between items-start mb-8">
-        {/* Titre et sous-titre */}
         <div>
           <h1 className="text-4xl font-bold text-yellow-400 mb-2">
             Dashboard Admin
@@ -120,7 +103,6 @@ const DashboardPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Boutons d'action */}
         <div className="flex gap-4">
           <Button 
             onClick={handleCreateQuiz}
@@ -147,9 +129,8 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Section des métriques clés */}
+      {/* Métriques */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* Métrique 1: Quiz Créés */}
         <Card className="bg-yellow-400 text-gray-900">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -162,7 +143,6 @@ const DashboardPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Métrique 2: Nombre de Tentatives */}
         <Card className="bg-yellow-400 text-gray-900">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -175,7 +155,6 @@ const DashboardPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Métrique 3: Nombre d'Inscrits */}
         <Card className="bg-yellow-400 text-gray-900">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -189,7 +168,7 @@ const DashboardPage: React.FC = () => {
         </Card>
       </div>
 
-      {/* Section de la liste des quiz */}
+      {/* Liste des quiz */}
       <Card className="bg-gray-100 text-gray-900">
         <CardHeader>
           <CardTitle className="text-xl font-bold">Liste des Quiz</CardTitle>
@@ -228,12 +207,15 @@ const DashboardPage: React.FC = () => {
                   key={quiz.id}
                   className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200"
                 >
-                  {/* Informations du quiz */}
+                  {/* Infos du quiz */}
                   <div className="flex items-center space-x-4">
                     <div>
                       <h3 className="font-semibold text-gray-900">{quiz.title}</h3>
                       <p className="text-sm text-gray-500">
-                        Créé le {new Date(quiz.createdAt).toLocaleDateString()}
+                        {quiz.createdAt 
+                          ? `Créé le ${new Date(quiz.createdAt).toLocaleDateString()}`
+                          : 'Date de création inconnue'
+                        }
                       </p>
                     </div>
                     <span className="px-3 py-1 bg-yellow-400 text-gray-900 rounded-full text-sm font-medium">
@@ -256,14 +238,14 @@ const DashboardPage: React.FC = () => {
                   {/* Boutons d'action */}
                   <div className="flex gap-2">
                     <Button 
-                      onClick={() => handleEditQuiz(quiz.id)}
+                      onClick={() => handleEditQuiz(quiz.id || 0)}
                       className="bg-blue-600 hover:bg-blue-700 text-white"
                     >
                       <Edit className="w-4 h-4 mr-2" />
                       Modifier
                     </Button>
                     <Button 
-                      onClick={() => handleViewResults(quiz.id)}
+                      onClick={() => handleViewResults(quiz.id || 0)}
                       className="bg-gray-800 hover:bg-gray-700 text-white"
                     >
                       <Eye className="w-4 h-4 mr-2" />
@@ -280,4 +262,4 @@ const DashboardPage: React.FC = () => {
   );
 };
 
-export default DashboardPage; 
+export default DashboardPage;

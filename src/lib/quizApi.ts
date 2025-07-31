@@ -1,10 +1,19 @@
 import type { Quiz, Question } from '@/types/Quiz';
 import { AuthService } from './auth';
 
-// Configuration de base pour notre API
-const API_BASE_URL = 'http://localhost:8000/api';
 
-// Interface pour la création d'un quiz
+const API_URL = 'http://localhost:8000/api';
+
+// Interface pour la réponse API Platform (JSON-LD)
+interface ApiPlatformResponse<T> {
+  '@context'?: string;
+  '@id'?: string;
+  '@type'?: string;
+  totalItems?: number;
+  member?: T[];
+}
+
+// Types pour créer un quiz
 interface CreateQuizRequest {
   title: string;
   description?: string;
@@ -14,26 +23,24 @@ interface CreateQuizRequest {
   questions: CreateQuestionRequest[];
 }
 
-// Interface pour la création d'une question
 interface CreateQuestionRequest {
   text: string;
   orderNumber: number;
   answers: CreateAnswerRequest[];
 }
 
-// Interface pour la création d'une réponse
 interface CreateAnswerRequest {
   text: string;
   isCorrect: boolean;
   orderNumber: number;
 }
 
-// Interface pour la réponse de création de quiz
+// Type pour la réponse quand on crée un quiz
 interface CreateQuizResponse {
   id: number;
   title: string;
   description?: string;
-  uniqueCode: string; // Pour compatibilité frontend
+  uniqueCode: string;
   accessCode: string;
   isActive: boolean;
   isStarted: boolean;
@@ -42,8 +49,8 @@ interface CreateQuizResponse {
   questions: Question[];
 }
 
-// Classe d'erreur personnalisée pour les erreurs de l'API
-class QuizApiError extends Error {
+// Classe d'erreur simple pour les quiz
+export class QuizApiError extends Error {
   public status: number;
 
   constructor(message: string, status: number) {
@@ -53,141 +60,95 @@ class QuizApiError extends Error {
   }
 }
 
-// Service pour gérer toutes les interactions avec l'API quiz
-class QuizApiService {
+// Service pour gérer les quiz
+export class QuizApiService {
   
-  /**
-   * Créer un nouveau quiz
-   * @param quizData - Les données du quiz à créer
-   * @returns Promise avec les données du quiz créé
-   */
+  // Fonction pour préparer les headers avec le token
+  private static getAuthHeaders() {
+    const token = AuthService.getToken();
+    if (!token) {
+      throw new QuizApiError('Vous devez être connecté', 401);
+    }
+
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+  }
+
+  // Créer un nouveau quiz
   static async createQuiz(quizData: CreateQuizRequest): Promise<CreateQuizResponse> {
     try {
-      // Récupérer le token d'authentification
-      const token = AuthService.getToken();
-      if (!token) {
-        throw new QuizApiError('Non authentifié', 401);
-      }
-
-      // Préparation des headers pour la requête JSON
-      const headers = new Headers();
-      headers.append('Content-Type', 'application/json');
-      headers.append('Accept', 'application/json');
-      headers.append('Authorization', `Bearer ${token}`);
-
-      // Configuration de la requête
-      const requestOptions: RequestInit = {
+      const response = await fetch(`${API_URL}/quizzes`, {
         method: 'POST',
-        headers: headers,
-        body: JSON.stringify(quizData),
-        credentials: 'include',
-      };
-
-      // Envoi de la requête vers l'API Symfony
-      const response = await fetch(`${API_BASE_URL}/quizzes`, requestOptions);
-
-      // Vérification si la requête a échoué
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new QuizApiError(
-          errorData.detail || 'Erreur lors de la création du quiz',
-          response.status
-        );
-      }
-
-      // Si tout va bien, on récupère les données du quiz créé
-      const createdQuiz: CreateQuizResponse = await response.json();
-      return createdQuiz;
-
-    } catch (error) {
-      // Si c'est déjà une QuizApiError, on la relance
-      if (error instanceof QuizApiError) {
-        throw error;
-      }
-
-      // Pour les autres erreurs (réseau, etc.), on crée une QuizApiError générique
-      console.error('Erreur réseau lors de la création du quiz:', error);
-      throw new QuizApiError('Erreur de connexion au serveur', 0);
-    }
-  }
-
-  /**
-   * Récupérer la liste des quiz
-   * @returns Promise avec la liste des quiz
-   */
-  static async getQuizzes(): Promise<Quiz[]> {
-    try {
-      const token = AuthService.getToken();
-      if (!token) {
-        throw new QuizApiError('Non authentifié', 401);
-      }
-
-      const headers = new Headers();
-      headers.append('Accept', 'application/json');
-      headers.append('Authorization', `Bearer ${token}`);
-
-      const response = await fetch(`${API_BASE_URL}/quizzes`, {
-        headers,
-        credentials: 'include',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(quizData)
       });
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new QuizApiError(
-          errorData.detail || 'Erreur lors de la récupération des quiz',
+          errorData.detail || 'Impossible de créer le quiz',
           response.status
         );
       }
 
-      const quizzes: Quiz[] = await response.json();
-      return quizzes;
+      return await response.json();
 
     } catch (error) {
       if (error instanceof QuizApiError) {
         throw error;
       }
-
-      console.error('Erreur lors de la récupération des quiz:', error);
-      throw new QuizApiError('Erreur de connexion au serveur', 0);
+      console.error('Erreur:', error);
+      throw new QuizApiError('Problème de connexion', 0);
     }
   }
 
-  /**
-   * Récupérer un quiz par son ID avec ses questions
-   * @param quizId - L'ID du quiz
-   * @returns Promise avec les données du quiz
-   */
+  // Récupérer tous les quiz
+  static async getQuizzes(): Promise<Quiz[] | ApiPlatformResponse<Quiz>> {
+    try {
+      const response = await fetch(`${API_URL}/quizzes`, {
+        headers: this.getAuthHeaders()
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new QuizApiError(
+          errorData.detail || 'Impossible de récupérer les quiz',
+          response.status
+        );
+      }
+
+      return await response.json();
+
+    } catch (error) {
+      if (error instanceof QuizApiError) {
+        throw error;
+      }
+      console.error('Erreur:', error);
+      throw new QuizApiError('Problème de connexion', 0);
+    }
+  }
+
+  // Récupérer un quiz avec ses questions
   static async getQuizById(quizId: number): Promise<Quiz> {
     try {
-      const token = AuthService.getToken();
-      if (!token) {
-        throw new QuizApiError('Non authentifié', 401);
-      }
-
-      const headers = new Headers();
-      headers.append('Accept', 'application/json');
-      headers.append('Authorization', `Bearer ${token}`);
-
-      const url = `${API_BASE_URL}/quizzes/${quizId}/with-questions`;
-
-      // Utiliser l'endpoint personnalisé qui retourne les questions complètes
-      const response = await fetch(url, {
-        headers,
-        credentials: 'include',
+      const response = await fetch(`${API_URL}/quizzes/${quizId}/with-questions`, {
+        headers: this.getAuthHeaders()
       });
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new QuizApiError(
-          errorData.detail || errorData.error || 'Quiz non trouvé',
+          errorData.detail || 'Quiz non trouvé',
           response.status
         );
       }
 
       const quizData = await response.json();
       
-      // Transformer les données pour correspondre à notre interface
-      const quiz: Quiz = {
+      // On transforme les données pour notre format
+      return {
         id: quizData.id,
         title: quizData.title,
         description: quizData.description,
@@ -198,45 +159,28 @@ class QuizApiService {
         teacher: quizData.teacher || '',
         questions: quizData.questions || []
       };
-      
-      return quiz;
 
     } catch (error) {
       if (error instanceof QuizApiError) {
         throw error;
       }
-
-      console.error('Erreur lors de la récupération du quiz:', error);
-      throw new QuizApiError('Erreur de connexion au serveur', 0);
+      console.error('Erreur:', error);
+      throw new QuizApiError('Problème de connexion', 0);
     }
   }
 
-  /**
-   * Supprimer un quiz
-   * @param quizId - L'ID du quiz à supprimer
-   * @returns Promise
-   */
+  // Supprimer un quiz
   static async deleteQuiz(quizId: number): Promise<void> {
     try {
-      const token = AuthService.getToken();
-      if (!token) {
-        throw new QuizApiError('Non authentifié', 401);
-      }
-
-      const headers = new Headers();
-      headers.append('Accept', 'application/json');
-      headers.append('Authorization', `Bearer ${token}`);
-
-      const response = await fetch(`${API_BASE_URL}/quizzes/${quizId}`, {
+      const response = await fetch(`${API_URL}/quizzes/${quizId}`, {
         method: 'DELETE',
-        headers,
-        credentials: 'include',
+        headers: this.getAuthHeaders()
       });
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new QuizApiError(
-          errorData.detail || 'Erreur lors de la suppression du quiz',
+          errorData.detail || 'Impossible de supprimer le quiz',
           response.status
         );
       }
@@ -245,18 +189,12 @@ class QuizApiService {
       if (error instanceof QuizApiError) {
         throw error;
       }
-
-      console.error('Erreur lors de la suppression du quiz:', error);
-      throw new QuizApiError('Erreur de connexion au serveur', 0);
+      console.error('Erreur:', error);
+      throw new QuizApiError('Problème de connexion', 0);
     }
   }
 
-  /**
-   * Ajouter une question à un quiz
-   * @param quizId - L'ID du quiz
-   * @param questionData - Les données de la question à ajouter
-   * @returns Promise avec les données de la question créée
-   */
+  // Ajouter une question à un quiz
   static async addQuestion(
     quizId: number, 
     questionData: {
@@ -282,45 +220,31 @@ class QuizApiService {
     };
   }> {
     try {
-      const token = AuthService.getToken();
-      if (!token) {
-        throw new QuizApiError('Non authentifié', 401);
-      }
-
-      const headers = new Headers();
-      headers.append('Content-Type', 'application/json');
-      headers.append('Accept', 'application/json');
-      headers.append('Authorization', `Bearer ${token}`);
-
-      const response = await fetch(`${API_BASE_URL}/quizzes/${quizId}/questions`, {
+      const response = await fetch(`${API_URL}/quizzes/${quizId}/questions`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify(questionData),
-        credentials: 'include',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(questionData)
       });
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new QuizApiError(
-          errorData.error || 'Erreur lors de l\'ajout de la question',
+          errorData.error || 'Impossible d\'ajouter la question',
           response.status
         );
       }
 
-      const result = await response.json();
-      return result;
+      return await response.json();
 
     } catch (error) {
       if (error instanceof QuizApiError) {
         throw error;
       }
-
-      console.error('Erreur lors de l\'ajout de la question:', error);
-      throw new QuizApiError('Erreur de connexion au serveur', 0);
+      console.error('Erreur:', error);
+      throw new QuizApiError('Problème de connexion', 0);
     }
   }
 }
 
-// Export de la classe et de l'erreur personnalisée
-export { QuizApiService, QuizApiError };
-export type { CreateQuizRequest, CreateQuestionRequest, CreateAnswerRequest, CreateQuizResponse }; 
+// Export des types
+export type { CreateQuizRequest, CreateQuestionRequest, CreateAnswerRequest, CreateQuizResponse, ApiPlatformResponse };
