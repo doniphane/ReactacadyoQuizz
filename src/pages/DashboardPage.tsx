@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, LogOut, Eye, FileText, Users, UserCheck, User, Loader2, Edit } from 'lucide-react';
+import { Plus, LogOut, Eye, FileText, Users, UserCheck, User, Loader2, Edit, Play, Pause, RefreshCw } from 'lucide-react';
 import { QuizApiService, QuizApiError } from '@/lib/quizApi';
+import { AuthService } from '@/lib/auth';
 import type { Quiz, DashboardMetrics } from '@/types/Quiz';
 
 // Composant principal du dashboard admin
@@ -21,8 +23,8 @@ const DashboardPage: React.FC = () => {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [updatingQuizId, setUpdatingQuizId] = useState<number | null>(null);
 
-  // Récupérer les quiz depuis l'API
   const fetchQuizzes = async () => {
     try {
       setIsLoading(true);
@@ -31,7 +33,7 @@ const DashboardPage: React.FC = () => {
       const response = await QuizApiService.getQuizzes();
       console.log('Réponse de l\'API:', response); 
       
-      // Vérifier si la réponse est un tableau ou un objet
+    
       let quizzesArray: Quiz[];
       if (Array.isArray(response)) {
         // Réponse directe en tableau
@@ -41,7 +43,7 @@ const DashboardPage: React.FC = () => {
         quizzesArray = response.member;
       } else {
         console.error('Format de réponse inattendu:', response);
-        quizzesArray = []; // Tableau vide par défaut
+        quizzesArray = []; 
       }
       
       setQuizzes(quizzesArray);
@@ -63,6 +65,62 @@ const DashboardPage: React.FC = () => {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // NOUVELLE FONCTION : Mettre à jour le statut d'un quiz
+  const updateQuizStatus = async (quizId: number, isActive: boolean) => {
+    try {
+      setUpdatingQuizId(quizId);
+      
+      // Récupérer le token depuis les cookies (pas localStorage)
+      const token = AuthService.getToken();
+      if (!token) {
+        toast.error('Vous devez être connecté pour effectuer cette action');
+        return;
+      }
+
+      console.log('Token récupéré:', token ? 'Présent' : 'Absent');
+
+      // Appel API via API Platform
+      const response = await fetch(`http://localhost:8000/api/quizzes/${quizId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ isActive })
+      });
+
+      console.log('Réponse API:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Erreur API:', errorText);
+        throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+      }
+
+      // Mettre à jour la liste locale
+      setQuizzes(prevQuizzes => 
+        prevQuizzes.map(quiz => 
+          quiz.id === quizId 
+            ? { ...quiz, isActive }
+            : quiz
+        )
+      );
+
+      // Message de succès simple
+      if (isActive) {
+        toast.success(' Quiz activé ! Les étudiants peuvent y accéder');
+      } else {
+        toast.success('⏸Quiz désactivé"');
+      }
+
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du statut:', error);
+      toast.error(' Erreur lors de la mise à jour du statut du quiz');
+    } finally {
+      setUpdatingQuizId(null);
     }
   };
 
@@ -99,7 +157,7 @@ const DashboardPage: React.FC = () => {
             Dashboard Admin
           </h1>
           <p className="text-gray-300 text-lg">
-            Gérez vos quiz et analysez les performances
+            Gérez vos quiz et activez/désactivez-les et analysez les performances
           </p>
         </div>
 
@@ -172,7 +230,7 @@ const DashboardPage: React.FC = () => {
       <Card className="bg-gray-100 text-gray-900">
         <CardHeader>
           <CardTitle className="text-xl font-bold">Liste des Quiz</CardTitle>
-          <p className="text-gray-600">Gérez vos quiz</p>
+          <p className="text-gray-600">Gérez vos quiz et activez/désactivez-les</p>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -237,6 +295,26 @@ const DashboardPage: React.FC = () => {
 
                   {/* Boutons d'action */}
                   <div className="flex gap-2">
+                    {/* NOUVEAU BOUTON TOGGLE */}
+                    <Button
+                      onClick={() => updateQuizStatus(quiz.id || 0, !quiz.isActive)}
+                      disabled={updatingQuizId === quiz.id}
+                      className={`${
+                        quiz.isActive 
+                          ? 'bg-orange-500 hover:bg-orange-600 text-white' 
+                          : 'bg-green-500 hover:bg-green-600 text-white'
+                      } min-w-[100px]`}
+                    >
+                      {updatingQuizId === quiz.id ? (
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      ) : quiz.isActive ? (
+                        <Pause className="w-4 h-4 mr-2" />
+                      ) : (
+                        <Play className="w-4 h-4 mr-2" />
+                      )}
+                      {updatingQuizId === quiz.id ? 'Mise à jour...' : quiz.isActive ? 'Désactiver' : 'Activer'}
+                    </Button>
+                    
                     <Button 
                       onClick={() => handleEditQuiz(quiz.id || 0)}
                       className="bg-blue-600 hover:bg-blue-700 text-white"
