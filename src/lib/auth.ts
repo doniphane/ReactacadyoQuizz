@@ -1,7 +1,7 @@
 import { jwtDecode } from 'jwt-decode';
 import Cookies from 'js-cookie';
 
-
+// Types simples
 interface User {
   id: number;
   email: string;
@@ -24,7 +24,7 @@ interface JWTPayload {
   exp: number;
 }
 
-
+// Service d'authentification simplifié
 export class AuthService {
   
   // Se connecter
@@ -43,12 +43,36 @@ export class AuthService {
       }
 
       const data = await response.json();
+      console.log('Réponse de l\'API de connexion:', data); // Pour débugger
       
-      // Sauvegarder dans les cookies
+      // Sauvegarder le token dans les cookies
       Cookies.set('auth_token', data.token, { expires: 1 });
-      Cookies.set('auth_user', JSON.stringify(data.user), { expires: 1 });
       
-      return data.user;
+      // Extraire les infos utilisateur depuis le token JWT
+      let userData: User;
+      
+      if (data.user) {
+        // Si l'API retourne les données utilisateur directement
+        userData = data.user;
+        console.log('Données utilisateur depuis l\'API:', userData);
+      } else {
+        // Sinon, extraire depuis le token JWT
+        console.log('Extraction des données depuis le token JWT...');
+        const decoded = jwtDecode<JWTPayload>(data.token);
+        userData = {
+          id: parseInt(decoded.sub),
+          email: decoded.email,
+          firstName: decoded.firstName,
+          lastName: decoded.lastName,
+          roles: decoded.roles
+        };
+        console.log('Données utilisateur depuis le JWT:', userData);
+      }
+      
+      // Sauvegarder les données utilisateur dans les cookies
+      Cookies.set('auth_user', JSON.stringify(userData), { expires: 1 });
+      
+      return userData;
 
     } catch (error) {
       console.error('Erreur de connexion:', error);
@@ -154,5 +178,5 @@ export class AuthService {
   }
 }
 
-
+// Export des types pour que le store puisse les utiliser
 export type { User, LoginData };
