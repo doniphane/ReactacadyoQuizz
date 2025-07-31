@@ -9,7 +9,7 @@ class AuthService {
   private static readonly COOKIE_OPTIONS = {
     secure: process.env.NODE_ENV === 'production',  // Cookie sécurisé en production
     sameSite: 'Strict' as const,  // Protection CSRF
-    expires: 7           // Expire dans 7 jours
+    expires: 1           // Expire dans 1 jour (plus proche du token JWT de 1 heure)
   };
 
   /**
@@ -54,43 +54,52 @@ class AuthService {
       method: 'POST',
       headers: headers,
       body: JSON.stringify(loginData),
+      credentials: 'include', // Inclure les cookies pour CORS
     };
 
-    // Envoi de la requête vers l'API Symfony
-    const response = await fetch('http://localhost:8000/api/login_check', requestOptions);
+    try {
+      // Envoi de la requête vers l'API Symfony
+      const response = await fetch('http://localhost:8000/api/login_check', requestOptions);
 
-    // Vérification si la requête a échoué
-    if (!response.ok) {
-      // Vérifier si la réponse est en JSON
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Erreur lors de la connexion');
-      } else {
-        // Si ce n'est pas du JSON (probablement une page d'erreur HTML)
-        throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+      // Vérification si la requête a échoué
+      if (!response.ok) {
+        // Vérifier si la réponse est en JSON
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || errorData.detail || 'Erreur lors de la connexion');
+        } else {
+          // Si ce n'est pas du JSON (probablement une page d'erreur HTML)
+          throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+        }
       }
+
+      // Vérifier que la réponse est bien du JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Réponse invalide du serveur (pas de JSON)');
+      }
+
+      // Récupération de la réponse avec token et utilisateur
+      const loginResponse: LoginResponse = await response.json();
+
+      // Vérification de la validité du token
+      if (!this.isTokenValid(loginResponse.token)) {
+        throw new Error('Token invalide reçu du serveur');
+      }
+
+      // Sauvegarde du token et des informations utilisateur
+      this.setToken(loginResponse.token);
+      this.setUser(loginResponse.user);
+
+      return loginResponse.user;
+    } catch (error) {
+      // Gestion spécifique des erreurs CORS
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        throw new Error('Erreur de connexion au serveur. Vérifiez que le serveur Symfony est démarré.');
+      }
+      throw error;
     }
-
-    // Vérifier que la réponse est bien du JSON
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      throw new Error('Réponse invalide du serveur (pas de JSON)');
-    }
-
-    // Récupération de la réponse avec token et utilisateur
-    const loginResponse: LoginResponse = await response.json();
-
-    // Vérification de la validité du token
-    if (!this.isTokenValid(loginResponse.token)) {
-      throw new Error('Token invalide reçu du serveur');
-    }
-
-    // Sauvegarde du token et des informations utilisateur
-    this.setToken(loginResponse.token);
-    this.setUser(loginResponse.user);
-
-    return loginResponse.user;
   }
 
   /**

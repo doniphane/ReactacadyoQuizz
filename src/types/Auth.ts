@@ -15,11 +15,11 @@ export interface LoginResponse {
 
 // Interface pour définir les données de connexion
 export interface LoginData {
-  username: string; 
+  username: string;  // Symfony attend 'username' au lieu de 'email'
   password: string;
 }
 
-
+// Interface pour définir le payload JWT
 export interface JWTPayload {
   exp: number;
   iat: number;

@@ -37,6 +37,7 @@ interface ApiErrorResponse {
   violations?: ApiValidationError[];
 }
 
+// Export de tous les types pour les utiliser dans l'application
 export type {
   UserCreateRequest,
   UserResponse,

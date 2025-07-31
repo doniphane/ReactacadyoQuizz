@@ -4,7 +4,7 @@ import { RegisterForm } from "@/components/register-form";
 import { UserApiService, ApiError } from "@/lib/api";
 import type { UserCreateRequest, UserResponse } from "@/types/User";
 
-
+// Composant de la page d'inscription avec React Router
 const RegisterPage: React.FC = () => {
   // Hook pour la navigation avec React Router
   const navigate = useNavigate();
@@ -21,7 +21,7 @@ const RegisterPage: React.FC = () => {
     const message = `Compte créé avec succès ! Bienvenue !`;
     setSuccessMessage(message);
 
-
+    // Redirection vers la page de connexion après inscription réussie
     setTimeout(() => {
       navigate('/login');
     }, 2000);

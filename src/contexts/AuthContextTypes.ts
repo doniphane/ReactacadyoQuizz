@@ -3,12 +3,12 @@ import type { User } from '@/types/Auth';
 
 
 export interface AuthContextType {
-
+  // État de l'authentification
   isAuthenticated: boolean;
   user: User | null;
   isLoading: boolean;
 
-  // Fonctions d'authentification
+
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
 
