@@ -15,7 +15,7 @@ interface User {
   roles: string[];
 }
 
-
+// Composant de la page d'inscription avec React Router
 const RegisterPage: React.FC = () => {
   // Hook pour la navigation avec React Router
   const navigate = useNavigate();
@@ -23,7 +23,7 @@ const RegisterPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-
+  // === FONCTIONS DE VALIDATION ===
 
   // Fonction pour valider le format email
   const isValidEmail = (email: string): boolean => {
@@ -46,7 +46,10 @@ const RegisterPage: React.FC = () => {
       return "Le mot de passe est trop long (maximum 100 caractères)";
     }
     
- 
+    // Vérifier qu'il contient au moins une lettre et un chiffre
+    if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(password)) {
+      return "Le mot de passe doit contenir au moins une lettre et un chiffre";
+    }
     
     return null; 
   };
@@ -72,10 +75,10 @@ const RegisterPage: React.FC = () => {
       return "Caractères non autorisés détectés dans l'email";
     }
     
-    return null; // Pas d'erreur
+    return null; 
   };
 
-
+  // === FONCTIONS HELPER CENTRALISÉES ===
 
   // Réinitialiser tous les messages
   const resetAllMessages = () => {
@@ -95,7 +98,7 @@ const RegisterPage: React.FC = () => {
     setSuccessMessage(message);
     setErrorMessage(""); 
 
-
+    // Redirection vers la page de connexion après inscription réussie
     setTimeout(() => {
       navigate('/login');
     }, 2000);
@@ -128,15 +131,15 @@ const RegisterPage: React.FC = () => {
     }
   };
 
-
+  // === FONCTION PRINCIPALE ===
 
   // Gérer la soumission du formulaire avec validation
   const handleRegisterSubmit = async (userData: NewUser) => {
-    console.log("Début de l'inscription...");
+
 
     resetAllMessages();
 
-    // === VALIDATIONS CÔTÉ FRONTEND ===
+  
     
     // 1. Vérifier que les champs ne sont pas vides
     if (!userData.email || !userData.password) {
@@ -169,26 +172,26 @@ const RegisterPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      console.log("Appel de l'API pour créer l'utilisateur");
+      
       const createdUser: User = await UserApiService.createUser(cleanUserData);
 
-      console.log("Utilisateur créé avec succès:", createdUser);
       showSuccessMessage();
     } catch (error) {
       handleApiError(error);
     } finally {
       setIsLoading(false);
-      console.log("Fin de l'inscription");
+  
     }
   };
 
+  // Naviguer vers la page de connexion
   const goToLoginPage = () => {
     navigate('/login');
   };
 
 
 
-
+ 
   const MessageDisplay: React.FC = () => {
     if (errorMessage) {
       return (
@@ -222,7 +225,7 @@ const RegisterPage: React.FC = () => {
 
       <div className="w-full xl:w-1/2 flex items-center justify-center p-6 xl:justify-start xl:pl-16">
         <div className="w-full max-w-md">
-        
+      
           <MessageDisplay />
 
           <RegisterForm

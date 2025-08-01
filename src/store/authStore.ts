@@ -30,19 +30,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Fonction pour initialiser le store 
   initialize: () => {
-    console.log('Initialisation du store d\'authentification...');
     get().checkAuth();
   },
 
   // Fonction pour connecter un utilisateur
   login: async (username: string, password: string) => {
-    console.log('Tentative de connexion...');
     set({ isLoading: true });
     
     try {
       // On essaie de se connecter via le service
       const userData = await AuthService.login({ username, password });
-      console.log('Connexion réussie:', userData);
       
       // Si ça marche, on met à jour notre store
       set({ 
@@ -52,7 +49,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
       
     } catch (error) {
-      console.error('Erreur de connexion:', error);
       // Si ça ne marche pas, on arrête le chargement
       set({ 
         user: null,
@@ -67,7 +63,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Fonction pour déconnecter un utilisateur
   logout: () => {
-    console.log('Déconnexion...');
     // On appelle le service pour supprimer les cookies
     AuthService.logout();
     
@@ -77,19 +72,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: false,  
       isLoading: false        
     });
-    
-    console.log('Déconnexion réussie');
   },
 
   // Fonction pour vérifier si l'utilisateur est encore connecté
   checkAuth: async () => {
-    console.log('Vérification de l\'authentification...');
-    
     try {
       // Vérifier si on a un token
       const token = AuthService.getToken();
       if (!token) {
-        console.log('Pas de token trouvé');
         set({ 
           user: null,
           isAuthenticated: false,
@@ -100,13 +90,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // Vérifier côté serveur si l'utilisateur est connecté
       const isConnected = await AuthService.isAuthenticated();
-      console.log('Utilisateur connecté:', isConnected);
       
       if (isConnected) {
         // Si oui, on récupère ses informations depuis le serveur
         try {
           const currentUser = await AuthService.getCurrentUser();
-          console.log('Données utilisateur récupérées:', currentUser);
           
           // Sauvegarder dans le store
           set({ 
@@ -114,10 +102,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             isAuthenticated: true,
             isLoading: false
           });
-          console.log('Store mis à jour avec l\'utilisateur connecté');
           
-        } catch (error) {
-          console.error('Erreur lors de la récupération de l\'utilisateur:', error);
+        } catch {
           set({ 
             user: null,
             isAuthenticated: false,
@@ -126,16 +112,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       } else {
         // Si non connecté, on remet tout à zéro
-        console.log('Utilisateur non connecté, reset du store');
         set({ 
           user: null,
           isAuthenticated: false,
           isLoading: false
         });
       }
-    } catch (error) {
+    } catch {
       // En cas d'erreur, on considère que l'utilisateur n'est pas connecté
-      console.error('Erreur lors de la vérification:', error);
       set({ 
         user: null,
         isAuthenticated: false,
@@ -153,7 +137,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return state.user.roles.includes(role);
     }
     
-  
+    // Sinon, vérifier côté serveur
     try {
       return await AuthService.hasRole(role);
     } catch {
@@ -163,12 +147,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Fonction pour vérifier si l'utilisateur est admin (utilise hasRole)
   isAdmin: async () => {
-    return get().hasRole('ROLE_ADMIN');
+    return await get().hasRole('ROLE_ADMIN');
   },
 
   // Fonction pour vérifier si l'utilisateur est un utilisateur normal (utilise hasRole)
   isUser: async () => {
-    return get().hasRole('ROLE_USER');
+    return await get().hasRole('ROLE_USER');
   }
 }));
 

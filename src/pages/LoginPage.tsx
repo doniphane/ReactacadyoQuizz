@@ -9,7 +9,7 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   
 
-  const { login, user } = useAuthStore();
+  const { login, isAdmin, isUser } = useAuthStore();
   
   // État pour gérer les erreurs de connexion
   const [error, setError] = useState<string>("");
@@ -96,18 +96,27 @@ const LoginPage: React.FC = () => {
     
       
    
+      // Connexion de l'utilisateur
       await login(username, password);
       
+      // Attendre un peu pour que le store soit mis à jour
+      await new Promise(resolve => setTimeout(resolve, 200));
       
-      const userRoles = user?.roles || [];
-      
-      if (userRoles.includes('ROLE_ADMIN')) {
-        navigate('/admin-dashboard');
-      } else if (userRoles.includes('ROLE_USER')) {
-        navigate('/student');
-      } else {
+      // Vérifier les rôles de manière asynchrone
+      try {
+        const isUserAdmin = await isAdmin();
+        const isUserStudent = await isUser();
         
-        navigate('/admin-dashboard');
+        if (isUserAdmin) {
+          navigate('/admin-dashboard');
+        } else if (isUserStudent) {
+          navigate('/student');
+        } else {
+          navigate('/student');
+        }
+      } catch {
+        // En cas d'erreur, rediriger vers la page étudiant par défaut
+        navigate('/student');
       }
       
     } catch (error) {

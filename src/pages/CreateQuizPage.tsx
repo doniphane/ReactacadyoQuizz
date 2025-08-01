@@ -202,12 +202,12 @@ const CreateQuizPage: React.FC = () => {
         questions: [] 
       };
 
-      console.log('Données du quiz à envoyer:', quizToSend);
+   
 
       // Créer le quiz via l'API
       const createdQuizResponse = await QuizApiService.createQuiz(quizToSend);
       
-      console.log('Quiz créé avec succès:', createdQuizResponse);
+
       
       // Afficher les messages de succès
       showSuccessToast('Quiz créé avec succès !');

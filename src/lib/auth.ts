@@ -32,16 +32,15 @@ export class AuthService {
       }
 
       const data = await response.json();
-      console.log('Réponse de l\'API de connexion:', data);
       
       // Sauvegarder SEULEMENT le token
       Cookies.set('auth_token', data.token, { expires: 1 });
       
       // Récupérer les données utilisateur depuis le serveur
-      return await this.getCurrentUser();
+      const userData = await this.getCurrentUser();
+      return userData;
 
-    } catch (error) {
-      console.error('Erreur de connexion:', error);
+    } catch {
       throw new Error('Impossible de se connecter');
     }
   }
@@ -106,8 +105,7 @@ export class AuthService {
 
       return data.user;
 
-    } catch (error) {
-      console.error('Erreur:', error);
+    } catch {
       this.logout();
       throw new Error('Impossible de récupérer l\'utilisateur');
     }

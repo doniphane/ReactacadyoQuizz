@@ -97,7 +97,7 @@ const DashboardPage: React.FC = () => {
       setError(null);
       
       const response = await QuizApiService.getQuizzes();
-      console.log('Réponse de l\'API:', response); 
+     
       
       // Vérifier le format de la réponse
       let quizzesArray: Quiz[];
@@ -236,7 +236,7 @@ const DashboardPage: React.FC = () => {
 
   const handleViewResults = (quizId: number | undefined) => {
     if (!validateQuizId(quizId)) return;
-    console.log(`Voir les résultats du quiz ${quizId}`);
+   
     // Navigation vers les résultats
   };
 
