@@ -4,7 +4,7 @@ import { AuthService } from './auth';
 
 const API_URL = 'http://localhost:8000/api';
 
-// Interface pour la réponse API Platform (JSON-LD)
+
 interface ApiPlatformResponse<T> {
   '@context'?: string;
   '@id'?: string;
@@ -229,6 +229,184 @@ export class QuizApiService {
         const errorData = await response.json();
         throw new QuizApiError(
           errorData.error || 'Impossible d\'ajouter la question',
+          response.status
+        );
+      }
+
+      return await response.json();
+
+    } catch (error) {
+      if (error instanceof QuizApiError) {
+        throw error;
+      }
+      console.error('Erreur:', error);
+      throw new QuizApiError('Problème de connexion', 0);
+    }
+  }
+
+  // Chercher un quiz par son code d'accès (pour les étudiants)
+  static async findQuizByCode(accessCode: string): Promise<{
+    id: number;
+    title: string;
+    description?: string;
+    accessCode: string;
+    isActive: boolean;
+  }> {
+    try {
+      // On utilise l'endpoint public pour chercher par code
+      const response = await fetch(`${API_URL}/public/quizzes/by-code/${accessCode}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new QuizApiError('Quiz non trouvé avec ce code', 404);
+        }
+        const errorData = await response.json();
+        throw new QuizApiError(
+          errorData.detail || 'Impossible de trouver le quiz',
+          response.status
+        );
+      }
+
+      const quizData = await response.json();
+      
+      return {
+        id: quizData.id,
+        title: quizData.title,
+        description: quizData.description,
+        accessCode: quizData.accessCode,
+        isActive: quizData.isActive
+      };
+
+    } catch (error) {
+      if (error instanceof QuizApiError) {
+        throw error;
+      }
+      console.error('Erreur:', error);
+      throw new QuizApiError('Problème de connexion', 0);
+    }
+  }
+
+  // Récupérer les questions d'un quiz (pour les étudiants)
+  static async getQuizQuestions(quizId: number): Promise<{
+    id: number;
+    text: string;
+    orderNumber: number;
+    answers: Array<{
+      id: number;
+      text: string;
+      orderNumber: number;
+      isCorrect: boolean;
+    }>;
+  }[]> {
+    try {
+      // On utilise l'endpoint public pour récupérer le quiz avec ses questions
+      const response = await fetch(`${API_URL}/public/quizzes/${quizId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new QuizApiError(
+          errorData.detail || 'Impossible de récupérer les questions',
+          response.status
+        );
+      }
+
+      const quizData = await response.json();
+      
+      // On retourne seulement les questions avec leurs réponses
+      return quizData.questions || [];
+
+    } catch (error) {
+      if (error instanceof QuizApiError) {
+        throw error;
+      }
+      console.error('Erreur:', error);
+      throw new QuizApiError('Problème de connexion', 0);
+    }
+  }
+
+  // Créer une tentative de quiz (pour les étudiants)
+  static async createQuizAttempt(
+    quizId: number, 
+    participantData: {
+      firstName: string;
+      lastName: string;
+    }
+  ): Promise<{
+    id: number;
+    participantFirstName: string;
+    participantLastName: string;
+    quiz: {
+      id: number;
+      title: string;
+    };
+  }> {
+    try {
+      const response = await fetch(`${API_URL}/quizzes/${quizId}/participate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          participantFirstName: participantData.firstName,
+          participantLastName: participantData.lastName
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new QuizApiError(
+          errorData.detail || 'Impossible de créer la tentative',
+          response.status
+        );
+      }
+
+      return await response.json();
+
+    } catch (error) {
+      if (error instanceof QuizApiError) {
+        throw error;
+      }
+      console.error('Erreur:', error);
+      throw new QuizApiError('Problème de connexion', 0);
+    }
+  }
+
+  // Soumettre les réponses d'un quiz (pour les étudiants)
+  static async submitQuizAnswers(
+    quizId: number,
+    attemptId: number,
+    answers: { [questionId: number]: number }
+  ): Promise<{
+    score: number;
+    totalQuestions: number;
+    percentage: number;
+  }> {
+    try {
+      const response = await fetch(`${API_URL}/quizzes/${quizId}/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          attemptId: attemptId,
+          answers: answers
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new QuizApiError(
+          errorData.error || 'Impossible de soumettre les réponses',
           response.status
         );
       }

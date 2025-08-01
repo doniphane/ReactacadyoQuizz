@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
+import { QuizApiService } from '@/lib/quizApi';
 
 // Interface pour une question
 interface Question {
@@ -50,39 +51,30 @@ const TakeQuizPage: React.FC = () => {
   useEffect(() => {
     const loadQuestions = async () => {
       try {
-        // TODO: Appeler l'API pour récupérer les questions du quiz
-        // const response = await QuizApiService.getQuizQuestions(quizInfo.id);
-        // setQuestions(response.questions);
+        // Appeler l'API pour récupérer les questions du quiz
+        const questionsData = await QuizApiService.getQuizQuestions(quizInfo.id);
         
-        // Pour l'instant, simulation avec des questions de test
-        const mockQuestions: Question[] = [
-          {
-            id: 1,
-            text: "Quelle est la capitale de la France ?",
-            orderNumber: 1,
-            answers: [
-              { id: 1, text: "Paris", orderNumber: 1, isCorrect: true },
-              { id: 2, text: "Lyon", orderNumber: 2, isCorrect: false },
-              { id: 3, text: "Marseille", orderNumber: 3, isCorrect: false },
-              { id: 4, text: "Toulouse", orderNumber: 4, isCorrect: false }
-            ]
-          },
-          {
-            id: 2,
-            text: "Quel est le plus grand océan du monde ?",
-            orderNumber: 2,
-            answers: [
-              { id: 5, text: "Océan Atlantique", orderNumber: 1, isCorrect: false },
-              { id: 6, text: "Océan Pacifique", orderNumber: 2, isCorrect: true },
-              { id: 7, text: "Océan Indien", orderNumber: 3, isCorrect: false },
-              { id: 8, text: "Océan Arctique", orderNumber: 4, isCorrect: false }
-            ]
-          }
-        ];
+        // Transformer les données pour correspondre à notre interface
+        const transformedQuestions: Question[] = questionsData.map(questionData => ({
+          id: questionData.id,
+          text: questionData.text,
+          orderNumber: questionData.orderNumber,
+          answers: questionData.answers.map(answerData => ({
+            id: answerData.id,
+            text: answerData.text,
+            orderNumber: answerData.orderNumber,
+            isCorrect: answerData.isCorrect
+          }))
+        }));
         
-        setQuestions(mockQuestions);
-      } catch {
-        alert('Erreur lors du chargement des questions');
+        console.log('Questions chargées depuis l\'API:', questionsData);
+        console.log('Questions transformées:', transformedQuestions);
+        
+        setQuestions(transformedQuestions);
+      } catch (error: unknown) {
+        // Gérer les erreurs de l'API
+        const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+        alert('Erreur lors du chargement des questions: ' + errorMessage);
         navigate('/student');
       } finally {
         setIsLoading(false);
@@ -99,6 +91,7 @@ const TakeQuizPage: React.FC = () => {
 
   // Fonction pour gérer la sélection d'une réponse
   const handleAnswerSelect = (questionId: number, answerId: number) => {
+    console.log('Sélection réponse:', { questionId, answerId });
     setUserAnswers(prev => ({
       ...prev,
       [questionId]: answerId
@@ -108,6 +101,9 @@ const TakeQuizPage: React.FC = () => {
   // Fonction pour gérer la soumission du quiz
   const handleSubmitQuiz = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    console.log('Soumission du quiz avec userAnswers:', userAnswers);
+    console.log('Questions:', questions);
     
     // Vérifier que toutes les questions ont une réponse
     const answeredQuestions = Object.keys(userAnswers).length;
@@ -119,12 +115,22 @@ const TakeQuizPage: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // TODO: Appeler l'API pour soumettre les réponses
-      // const response = await QuizApiService.submitQuizAnswers({
-      //   participantData,
-      //   quizId: quizInfo.id,
-      //   answers: userAnswers
-      // });
+      // Créer une tentative de quiz
+      const attemptData = await QuizApiService.createQuizAttempt(quizInfo.id, {
+        firstName: participantData.firstName,
+        lastName: participantData.lastName
+      });
+      
+      console.log('Tentative créée:', attemptData);
+      
+      // Soumettre les réponses
+      const results = await QuizApiService.submitQuizAnswers(
+        quizInfo.id,
+        attemptData.id,
+        userAnswers
+      );
+      
+      console.log('Résultats reçus:', results);
       
       // Navigation vers la page de résultats
       navigate('/quiz-results', {
@@ -133,15 +139,17 @@ const TakeQuizPage: React.FC = () => {
           quizInfo,
           userAnswers,
           questions,
-          // results: response
+          results: results
         }
       });
       
-          } catch {
-        alert('Erreur lors de la soumission du quiz');
-      } finally {
-        setIsSubmitting(false);
-      }
+    } catch (error: unknown) {
+      // Gérer les erreurs de l'API
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      alert('Erreur lors de la soumission du quiz: ' + errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Fonction pour retourner à la page précédente
