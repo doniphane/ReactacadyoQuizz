@@ -15,7 +15,7 @@ interface NewUser {
   password: string;
 }
 
-// Classe d'erreur simple pour l'API
+
 export class ApiError extends Error {
   public status: number;
   public violations?: { propertyPath: string; message: string }[];
@@ -69,7 +69,7 @@ export class UserApiService {
       };
 
     } catch (error) {
-      // Si c'est déjà une ApiError, on la relance
+  
       if (error instanceof ApiError) {
         throw error;
       }

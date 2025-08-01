@@ -15,7 +15,7 @@ interface User {
   roles: string[];
 }
 
-// Composant de la page d'inscription avec React Router
+
 const RegisterPage: React.FC = () => {
   // Hook pour la navigation avec React Router
   const navigate = useNavigate();
@@ -23,56 +23,159 @@ const RegisterPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+
+
+  // Fonction pour valider le format email
+  const isValidEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  // Fonction pour nettoyer et sécuriser les entrées
+  const sanitizeInput = (input: string): string => {
+    return input.trim().replace(/[<>]/g, ''); 
+  };
+
+  // Fonction pour valider le mot de passe
+  const validatePassword = (password: string): string | null => {
+    if (password.length < 6) {
+      return "Le mot de passe doit contenir au moins 6 caractères";
+    }
+    
+    if (password.length > 100) {
+      return "Le mot de passe est trop long (maximum 100 caractères)";
+    }
+    
+ 
+    
+    return null; 
+  };
+
+  // Fonction pour valider l'email
+  const validateEmail = (email: string): string | null => {
+    const cleanEmail = sanitizeInput(email);
+    
+    if (!cleanEmail) {
+      return "L'adresse email est obligatoire";
+    }
+    
+    if (cleanEmail.length > 254) {
+      return "L'adresse email est trop longue";
+    }
+    
+    if (!isValidEmail(cleanEmail)) {
+      return "Veuillez entrer une adresse email valide";
+    }
+    
+    // Vérifier contre les tentatives d'injection
+    if (cleanEmail.includes('--') || cleanEmail.includes(';') || cleanEmail.includes('/*')) {
+      return "Caractères non autorisés détectés dans l'email";
+    }
+    
+    return null; // Pas d'erreur
+  };
+
+
+
+  // Réinitialiser tous les messages
   const resetAllMessages = () => {
     setErrorMessage("");
     setSuccessMessage("");
   };
 
-  const showSuccessMessage = () => {
-    const message = `Compte créé avec succès ! Bienvenue !`;
-    setSuccessMessage(message);
+  // Afficher un message d'erreur
+  const showErrorMessage = (message: string) => {
+    setErrorMessage(message);
+    setSuccessMessage(""); 
+  };
 
-    // Redirection vers la page de connexion après inscription réussie
+  // Afficher un message de succès et rediriger
+  const showSuccessMessage = () => {
+    const message = `Compte créé avec succès ! Redirection...`;
+    setSuccessMessage(message);
+    setErrorMessage(""); 
+
+
     setTimeout(() => {
       navigate('/login');
     }, 2000);
   };
 
-  const handleApiErrors = (error: ApiError) => {
-    if (error.status === 409) {
-      setErrorMessage("Cet email est déjà utilisé par un autre compte");
-    } else if (error.status === 422) {
-      setErrorMessage("Les données du formulaire ne sont pas valides");
+  // Gérer les erreurs de l'API
+  const handleApiError = (error: unknown) => {
+    console.error("Erreur lors de la création:", error);
+
+    if (error instanceof ApiError) {
+      // Gestion spécifique des erreurs API
+      if (error.status === 409) {
+        showErrorMessage("Cet email est déjà utilisé par un autre compte");
+      } else if (error.status === 422) {
+        showErrorMessage("Les données du formulaire ne sont pas valides");
+      } else if (error.status === 400) {
+        showErrorMessage("Données invalides. Vérifiez votre saisie.");
+      } else {
+        showErrorMessage(error.message || "Erreur lors de la création du compte");
+      }
+    } else if (error instanceof Error) {
+      // Gestion des autres types d'erreurs
+      if (error.message.includes('Network')) {
+        showErrorMessage("Problème de connexion au serveur. Veuillez réessayer.");
+      } else {
+        showErrorMessage("Une erreur est survenue. Veuillez réessayer plus tard.");
+      }
     } else {
-      setErrorMessage(error.message || "Erreur lors de la création du compte");
+      showErrorMessage("Une erreur est survenue. Veuillez réessayer plus tard.");
     }
   };
 
-  const handleUnknownError = () => {
-    setErrorMessage("Une erreur est survenue. Veuillez réessayer plus tard.");
-  };
 
+
+  // Gérer la soumission du formulaire avec validation
   const handleRegisterSubmit = async (userData: NewUser) => {
     console.log("Début de l'inscription...");
 
     resetAllMessages();
 
+    // === VALIDATIONS CÔTÉ FRONTEND ===
+    
+    // 1. Vérifier que les champs ne sont pas vides
+    if (!userData.email || !userData.password) {
+      showErrorMessage("Tous les champs sont obligatoires");
+      return;
+    }
+
+    // 2. Valider l'email
+    const emailError = validateEmail(userData.email);
+    if (emailError) {
+      showErrorMessage(emailError);
+      return;
+    }
+
+    // 3. Valider le mot de passe
+    const passwordError = validatePassword(userData.password);
+    if (passwordError) {
+      showErrorMessage(passwordError);
+      return;
+    }
+
+    // 4. Nettoyer les données avant envoi
+    const cleanUserData: NewUser = {
+      email: sanitizeInput(userData.email),
+      password: userData.password 
+    };
+
+
+
     setIsLoading(true);
 
     try {
       console.log("Appel de l'API pour créer l'utilisateur");
-      const createdUser: User = await UserApiService.createUser(userData);
+      const createdUser: User = await UserApiService.createUser(cleanUserData);
 
       console.log("Utilisateur créé avec succès:", createdUser);
       showSuccessMessage();
     } catch (error) {
-      console.error("Erreur lors de la création:", error);
-
-      if (error instanceof ApiError) {
-        handleApiErrors(error);
-      } else {
-        handleUnknownError();
-      }
+      handleApiError(error);
     } finally {
       setIsLoading(false);
       console.log("Fin de l'inscription");
@@ -83,24 +186,27 @@ const RegisterPage: React.FC = () => {
     navigate('/login');
   };
 
-  const renderErrorMessage = () => {
-    if (!errorMessage) return null;
 
-    return (
-      <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-        <p className="text-sm">{errorMessage}</p>
-      </div>
-    );
-  };
 
-  const renderSuccessMessage = () => {
-    if (!successMessage) return null;
 
-    return (
-      <div className="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
-        <p className="text-sm">{successMessage}</p>
-      </div>
-    );
+  const MessageDisplay: React.FC = () => {
+    if (errorMessage) {
+      return (
+        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+          <p className="text-sm">{errorMessage}</p>
+        </div>
+      );
+    }
+
+    if (successMessage) {
+      return (
+        <div className="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
+          <p className="text-sm">{successMessage}</p>
+        </div>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -116,9 +222,8 @@ const RegisterPage: React.FC = () => {
 
       <div className="w-full xl:w-1/2 flex items-center justify-center p-6 xl:justify-start xl:pl-16">
         <div className="w-full max-w-md">
-          {renderErrorMessage()}
-
-          {renderSuccessMessage()}
+        
+          <MessageDisplay />
 
           <RegisterForm
             onSubmit={handleRegisterSubmit}

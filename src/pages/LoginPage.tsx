@@ -3,53 +3,134 @@ import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store";
 import { LoginForm } from "@/components/login-form";
 
-// Composant de la page de connexion avec Zustand
+
 const LoginPage: React.FC = () => {
-  // Hook pour la navigation avec React Router
+
   const navigate = useNavigate();
   
-  // Hook pour accéder au store d'authentification
-  const { login, isAdmin, isUser } = useAuthStore();
+
+  const { login, user } = useAuthStore();
   
   // État pour gérer les erreurs de connexion
   const [error, setError] = useState<string>("");
 
-  // Fonction pour gérer la soumission du formulaire de connexion
+  // Fonction pour valider le format email
+  const isValidEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  // Fonction pour nettoyer et sécuriser les entrées
+  const sanitizeInput = (input: string): string => {
+    return input.trim().replace(/[<>]/g, ''); 
+  };
+
+  // Fonction pour valider le mot de passe
+  const validatePassword = (password: string): string | null => {
+    if (password.length < 6) {
+      return "Le mot de passe doit contenir au moins 6 caractères";
+    }
+    
+    if (password.length > 100) {
+      return "Le mot de passe est trop long (maximum 100 caractères)";
+    }
+    
+   
+    
+    return null; 
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
-    // Réinitialisation des erreurs
+
     setError("");
     
     try {
       const formData = new FormData(e.currentTarget);
-      const username = formData.get("email") as string; // Le champ s'appelle "email" dans le formulaire mais on l'utilise comme username
-      const password = formData.get("password") as string;
+      const rawUsername = formData.get("email") as string;
+      const rawPassword = formData.get("password") as string;
+
+      // === VALIDATIONS CÔTÉ FRONTEND ===
       
-      // Appel de la fonction de connexion du contexte
+      // 1. Vérifier si les champs sont vides
+      if (!rawUsername || !rawPassword) {
+        setError("Tous les champs sont obligatoires");
+        return;
+      }
+
+      // 2. Nettoyer les données d'entrée
+      const username = sanitizeInput(rawUsername);
+      const password = rawPassword; 
+
+      // 3. Vérifier que les champs ne sont pas vides après nettoyage
+      if (!username || !password) {
+        setError("Veuillez remplir tous les champs correctement");
+        return;
+      }
+
+      // 4. Vérifier la longueur de l'email
+      if (username.length > 254) {
+        setError("L'adresse email est trop longue");
+        return;
+      }
+
+      // 5. Vérifier le format email
+      if (!isValidEmail(username)) {
+        setError("Veuillez entrer une adresse email valide");
+        return;
+      }
+
+      // 6. Valider le mot de passe
+      const passwordError = validatePassword(password);
+      if (passwordError) {
+        setError(passwordError);
+        return;
+      }
+
+
+      if (username.includes('--') || username.includes(';') || username.includes('/*')) {
+        setError("Caractères non autorisés détectés");
+        return;
+      }
+
+    
+      
+   
       await login(username, password);
       
-      // Redirection selon le rôle de l'utilisateur
-      if (isAdmin()) {
+      
+      const userRoles = user?.roles || [];
+      
+      if (userRoles.includes('ROLE_ADMIN')) {
         navigate('/admin-dashboard');
-      } else if (isUser()) {
+      } else if (userRoles.includes('ROLE_USER')) {
         navigate('/student');
       } else {
-        // Si aucun rôle spécifique, rediriger vers le dashboard admin par défaut
+        
         navigate('/admin-dashboard');
       }
       
-    } catch {
-      setError("Email ou mot de passe incorrect");
+    } catch (error) {
+   
+      if (error instanceof Error) {
+     
+        if (error.message.includes('Network')) {
+          setError("Problème de connexion au serveur. Veuillez réessayer.");
+        } else {
+          setError("Email ou mot de passe incorrect");
+        }
+      } else {
+        setError("Email ou mot de passe incorrect");
+      }
     }
   };
 
-  // Fonction pour naviguer vers la page d'inscription
+  
   const handleNavigateToRegister = () => {
     navigate('/register');
   };
 
-    return (
+  return (
     <div className="min-h-screen flex" style={{ backgroundColor: '#18191D' }}>
 
       <div className="hidden xl:flex w-1/2 items-center justify-end pr-16">
@@ -72,7 +153,7 @@ const LoginPage: React.FC = () => {
             <p className="text-gray-600">Accédez à votre espace</p>
           </div>
 
-          {/* Affichage des erreurs de connexion */}
+        
           {error && (
             <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
               <p className="text-sm">{error}</p>
@@ -87,4 +168,4 @@ const LoginPage: React.FC = () => {
   );
 };
 
-export default LoginPage; 
+export default LoginPage;

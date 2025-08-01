@@ -1,4 +1,3 @@
-import { jwtDecode } from 'jwt-decode';
 import Cookies from 'js-cookie';
 
 // Types simples
@@ -15,16 +14,6 @@ interface LoginData {
   password: string;
 }
 
-interface JWTPayload {
-  sub: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  roles: string[];
-  exp: number;
-}
-
-// Service d'authentification simplifié
 export class AuthService {
   
   // Se connecter
@@ -43,36 +32,13 @@ export class AuthService {
       }
 
       const data = await response.json();
-      console.log('Réponse de l\'API de connexion:', data); // Pour débugger
+      console.log('Réponse de l\'API de connexion:', data);
       
-      // Sauvegarder le token dans les cookies
+      // Sauvegarder SEULEMENT le token
       Cookies.set('auth_token', data.token, { expires: 1 });
       
-      // Extraire les infos utilisateur depuis le token JWT
-      let userData: User;
-      
-      if (data.user) {
-        // Si l'API retourne les données utilisateur directement
-        userData = data.user;
-        console.log('Données utilisateur depuis l\'API:', userData);
-      } else {
-        // Sinon, extraire depuis le token JWT
-        console.log('Extraction des données depuis le token JWT...');
-        const decoded = jwtDecode<JWTPayload>(data.token);
-        userData = {
-          id: parseInt(decoded.sub),
-          email: decoded.email,
-          firstName: decoded.firstName,
-          lastName: decoded.lastName,
-          roles: decoded.roles
-        };
-        console.log('Données utilisateur depuis le JWT:', userData);
-      }
-      
-      // Sauvegarder les données utilisateur dans les cookies
-      Cookies.set('auth_user', JSON.stringify(userData), { expires: 1 });
-      
-      return userData;
+      // Récupérer les données utilisateur depuis le serveur
+      return await this.getCurrentUser();
 
     } catch (error) {
       console.error('Erreur de connexion:', error);
@@ -83,38 +49,6 @@ export class AuthService {
   // Se déconnecter
   static logout(): void {
     Cookies.remove('auth_token');
-    Cookies.remove('auth_user');
-  }
-
-  // Vérifier si le token est encore valide
-  static isTokenValid(): boolean {
-    const token = Cookies.get('auth_token');
-    if (!token) return false;
-
-    try {
-      const decoded = jwtDecode<JWTPayload>(token);
-      const currentTime = Date.now() / 1000;
-      return decoded.exp > currentTime;
-    } catch {
-      return false;
-    }
-  }
-
-  // Vérifier si on est connecté
-  static isAuthenticated(): boolean {
-    return this.isTokenValid();
-  }
-
-  // Récupérer l'utilisateur connecté
-  static getCurrentUser(): User | null {
-    const userStr = Cookies.get('auth_user');
-    if (!userStr) return null;
-
-    try {
-      return JSON.parse(userStr);
-    } catch {
-      return null;
-    }
   }
 
   // Récupérer le token
@@ -122,61 +56,82 @@ export class AuthService {
     return Cookies.get('auth_token') || null;
   }
 
-  // Récupérer les rôles depuis le token JWT
-  static getRolesFromToken(): string[] {
+  // Vérifier si on est connecté (demande au serveur)
+  static async isAuthenticated(): Promise<boolean> {
     const token = this.getToken();
-    if (!token) return [];
+    if (!token) return false;
 
     try {
-      const decoded = jwtDecode<JWTPayload>(token);
-      return decoded.roles || [];
+      const response = await fetch('http://localhost:8000/api/verify-token', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      return response.ok;
     } catch {
-      return [];
+      return false;
+    }
+  }
+
+  // Récupérer l'utilisateur connecté (depuis le serveur)
+  static async getCurrentUser(): Promise<User> {
+    const token = this.getToken();
+    if (!token) {
+      throw new Error('Token non trouvé');
+    }
+
+    try {
+      const response = await fetch('http://localhost:8000/api/verify-token', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        this.logout(); 
+        throw new Error('Token invalide');
+      }
+
+      const data = await response.json();
+      
+      if (!data.valid || !data.user) {
+        this.logout();
+        throw new Error('Token invalide');
+      }
+
+      return data.user;
+
+    } catch (error) {
+      console.error('Erreur:', error);
+      this.logout();
+      throw new Error('Impossible de récupérer l\'utilisateur');
     }
   }
 
   // Vérifier si l'utilisateur a un rôle spécifique
-  static hasRole(role: string): boolean {
-    // Vérifier dans le token JWT
-    const tokenRoles = this.getRolesFromToken();
-    if (tokenRoles.includes(role)) {
-      return true;
+  static async hasRole(role: string): Promise<boolean> {
+    try {
+      const user = await this.getCurrentUser();
+      return user.roles.includes(role);
+    } catch {
+      return false;
     }
-
-    // Vérifier dans les données utilisateur
-    const user = this.getCurrentUser();
-    return user ? user.roles.includes(role) : false;
   }
 
   // Vérifier si l'utilisateur est admin
-  static isAdmin(): boolean {
-    return this.hasRole('ROLE_ADMIN');
+  static async isAdmin(): Promise<boolean> {
+    return await this.hasRole('ROLE_ADMIN');
   }
 
-  // Vérifier si l'utilisateur est un utilisateur normal
-  static isUser(): boolean {
-    return this.hasRole('ROLE_USER');
-  }
-
-  // Récupérer les infos utilisateur depuis le token
-  static getUserFromToken(): Partial<User> | null {
-    const token = this.getToken();
-    if (!token) return null;
-
-    try {
-      const decoded = jwtDecode<JWTPayload>(token);
-      return {
-        id: parseInt(decoded.sub),
-        email: decoded.email,
-        firstName: decoded.firstName,
-        lastName: decoded.lastName,
-        roles: decoded.roles
-      };
-    } catch {
-      return null;
-    }
+  // Vérifier si l'utilisateur est un utilisateur normal Role_user
+  static async isUser(): Promise<boolean> {
+    return await this.hasRole('ROLE_USER');
   }
 }
 
-// Export des types pour que le store puisse les utiliser
 export type { User, LoginData };

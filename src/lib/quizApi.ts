@@ -31,7 +31,7 @@ interface CreateQuestionRequest {
 
 interface CreateAnswerRequest {
   text: string;
-  isCorrect: boolean;
+  correct: boolean;
   orderNumber: number;
 }
 
@@ -62,8 +62,7 @@ export class QuizApiError extends Error {
 
 // Service pour gérer les quiz
 export class QuizApiService {
-  
-  // Fonction pour préparer les headers avec le token
+
   private static getAuthHeaders() {
     const token = AuthService.getToken();
     if (!token) {
@@ -133,7 +132,7 @@ export class QuizApiService {
   // Récupérer un quiz avec ses questions
   static async getQuizById(quizId: number): Promise<Quiz> {
     try {
-      const response = await fetch(`${API_URL}/quizzes/${quizId}/with-questions`, {
+      const response = await fetch(`${API_URL}/quizzes/${quizId}`, {
         headers: this.getAuthHeaders()
       });
 
@@ -201,7 +200,7 @@ export class QuizApiService {
       text: string;
       answers: Array<{
         text: string;
-        isCorrect: boolean;
+        correct: boolean;
       }>;
     }
   ): Promise<{
@@ -214,7 +213,7 @@ export class QuizApiService {
       answers: Array<{
         id: number;
         text: string;
-        isCorrect: boolean;
+        correct: boolean;
         orderNumber: number;
       }>;
     };

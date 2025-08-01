@@ -26,8 +26,8 @@ const ManageQuestionsPage: React.FC = () => {
   const [newQuestion, setNewQuestion] = useState({
     text: '',
     answers: [
-      { text: '', isCorrect: false },
-      { text: '', isCorrect: false }
+      { text: '', correct: false },
+      { text: '', correct: false }
     ]
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,6 +54,7 @@ const ManageQuestionsPage: React.FC = () => {
         teacher: quizData.teacher,
         questions: quizData.questions || []
       };
+      
       setQuiz(transformedQuiz);
       
     } catch (error) {
@@ -73,12 +74,12 @@ const ManageQuestionsPage: React.FC = () => {
   const handleAddAnswer = () => {
     setNewQuestion(prev => ({
       ...prev,
-      answers: [...prev.answers, { text: '', isCorrect: false }]
+      answers: [...prev.answers, { text: '', correct: false }]
     }));
   };
 
   // Fonction pour mettre à jour une réponse
-  const handleAnswerChange = (index: number, field: 'text' | 'isCorrect', value: string | boolean) => {
+  const handleAnswerChange = (index: number, field: 'text' | 'correct', value: string | boolean) => {
     setNewQuestion(prev => ({
       ...prev,
       answers: prev.answers.map((answer, i) => 
@@ -114,7 +115,7 @@ const ManageQuestionsPage: React.FC = () => {
       return;
     }
     
-    const hasCorrectAnswer = newQuestion.answers.some(answer => answer.isCorrect);
+    const hasCorrectAnswer = newQuestion.answers.some(answer => answer.correct);
     if (!hasCorrectAnswer) {
       alert('Il faut au moins une réponse correcte');
       return;
@@ -128,7 +129,7 @@ const ManageQuestionsPage: React.FC = () => {
         text: newQuestion.text,
         answers: newQuestion.answers.map(answer => ({
           text: answer.text,
-          isCorrect: answer.isCorrect
+          correct: answer.correct
         }))
       });
       
@@ -136,8 +137,8 @@ const ManageQuestionsPage: React.FC = () => {
       setNewQuestion({
         text: '',
         answers: [
-          { text: '', isCorrect: false },
-          { text: '', isCorrect: false }
+          { text: '', correct: false },
+          { text: '', correct: false }
         ]
       });
       
@@ -249,22 +250,58 @@ const ManageQuestionsPage: React.FC = () => {
                        <h5 className="font-semibold text-gray-900 mb-3">
                          Question {index + 1}: {question.text || 'Question sans texte'}
                        </h5>
-                       <div className="ml-4 space-y-2">
+                       <div className="ml-4 space-y-3">
                          {question.answers && Array.isArray(question.answers) && question.answers
                            .sort((a, b) => (a.orderNumber || 0) - (b.orderNumber || 0))
                            .map((answer, answerIndex) => (
-                           <div key={`answer-${answer.id || answerIndex}-${index}-${answerIndex}`} className="flex items-center gap-2">
-                             <span className={`font-medium ${
-                               answer.isCorrect ? 'text-green-600' : 'text-gray-600'
+                           <div 
+                             key={`answer-${answer.id || answerIndex}-${index}-${answerIndex}`} 
+                             className={`flex items-center gap-3 p-3 rounded-lg border-2 ${
+                               answer.correct 
+                                 ? 'bg-green-50 border-green-300' 
+                                 : 'bg-red-50 border-red-300'
+                             }`}
+                           >
+                             {/* Icône de statut */}
+                             <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                               answer.correct 
+                                 ? 'bg-green-500 text-white' 
+                                 : 'bg-red-500 text-white'
                              }`}>
-                               {answerIndex + 1}. {answer.text || 'Réponse sans texte'}
-                             </span>
-                             {answer.isCorrect && (
-                               <Badge className="bg-green-100 text-green-800">
-                                 <CheckCircle className="w-3 h-3 mr-1" />
-                                 Correct
-                               </Badge>
-                             )}
+                               {answer.correct ? (
+                                 <CheckCircle className="w-4 h-4" />
+                               ) : (
+                                 <XCircle className="w-4 h-4" />
+                               )}
+                             </div>
+                             
+                             {/* Numéro et texte de la réponse */}
+                             <div className="flex-1">
+                               <span className={`font-semibold ${
+                                 answer.correct ? 'text-green-800' : 'text-red-800'
+                               }`}>
+                                 {answerIndex + 1}. {answer.text || 'Réponse sans texte'}
+                               </span>
+                             </div>
+                             
+                             {/* Badge de statut */}
+                             <Badge className={`${
+                               answer.correct 
+                                 ? 'bg-green-100 text-green-800 border-green-300' 
+                                 : 'bg-red-100 text-red-800 border-red-300'
+                             }`}>
+                               {answer.correct ? (
+                                 <>
+                                   <CheckCircle className="w-3 h-3 mr-1" />
+                                   Correct
+                                 </>
+                               ) : (
+                                 <>
+                                   <XCircle className="w-3 h-3 mr-1" />
+                                   Incorrect
+                                 </>
+                               )}
+                             </Badge>
                            </div>
                          ))}
                        </div>
@@ -310,33 +347,65 @@ const ManageQuestionsPage: React.FC = () => {
                 {/* Réponses */}
                 <div className="mb-4">
                   <Label className="text-sm font-medium">Réponses *</Label>
-                  <div className="space-y-2 mt-2">
+                  <div className="space-y-3 mt-2">
                     {newQuestion.answers.map((answer, index) => (
-                      <div key={`answer-${index}`} className="flex gap-2">
-                        <Input
-                          value={answer.text}
-                          onChange={(e) => handleAnswerChange(index, 'text', e.target.value)}
-                          placeholder={`Réponse ${index + 1}`}
-                          required
-                          className="flex-1"
-                        />
-                        <input
-                          type="checkbox"
-                          checked={answer.isCorrect}
-                          onChange={(e) => handleAnswerChange(index, 'isCorrect', e.target.checked)}
-                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        {newQuestion.answers.length > 2 && (
-                          <Button
-                            type="button"
-                            onClick={() => handleRemoveAnswer(index)}
-                            variant="outline"
-                            size="sm"
-                            className="text-red-600 border-red-600 hover:bg-red-50"
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </Button>
-                        )}
+                                              <div 
+                          key={`answer-${index}`} 
+                          className={`p-3 rounded-lg border-2 ${
+                            answer.correct 
+                              ? 'bg-green-50 border-green-300' 
+                              : 'bg-gray-50 border-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {/* Icône de statut */}
+                            <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                              answer.correct 
+                                ? 'bg-green-500 text-white' 
+                                : 'bg-gray-400 text-white'
+                            }`}>
+                              {answer.correct ? (
+                                <CheckCircle className="w-4 h-4" />
+                              ) : (
+                                <XCircle className="w-4 h-4" />
+                              )}
+                            </div>
+                            
+                            {/* Input de réponse */}
+                            <Input
+                              value={answer.text}
+                              onChange={(e) => handleAnswerChange(index, 'text', e.target.value)}
+                              placeholder={`Réponse ${index + 1}`}
+                              required
+                              className="flex-1"
+                            />
+                            
+                            {/* Checkbox pour marquer comme correcte */}
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={answer.correct}
+                                onChange={(e) => handleAnswerChange(index, 'correct', e.target.checked)}
+                                className="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500"
+                              />
+                              <span className="text-sm font-medium text-gray-700">
+                                Correct
+                              </span>
+                            </div>
+                          
+                          {/* Bouton supprimer */}
+                          {newQuestion.answers.length > 2 && (
+                            <Button
+                              type="button"
+                              onClick={() => handleRemoveAnswer(index)}
+                              variant="outline"
+                              size="sm"
+                              className="text-red-600 border-red-600 hover:bg-red-50"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

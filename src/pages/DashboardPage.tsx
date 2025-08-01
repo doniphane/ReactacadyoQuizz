@@ -4,12 +4,12 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '@/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, LogOut, Eye, FileText, Users, UserCheck, User, Loader2, Edit, Play, Pause, RefreshCw } from 'lucide-react';
+import { Plus, LogOut, Eye, FileText, Users, UserCheck, User, Loader2, Edit, Play, Pause, RefreshCw, Trash2 } from 'lucide-react';
 import { QuizApiService, QuizApiError } from '@/lib/quizApi';
 import { AuthService } from '@/lib/auth';
 import type { Quiz, DashboardMetrics } from '@/types/Quiz';
 
-// Composant principal du dashboard admin
+
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { logout } = useAuthStore();
@@ -24,7 +24,73 @@ const DashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingQuizId, setUpdatingQuizId] = useState<number | null>(null);
+  const [deletingQuizId, setDeletingQuizId] = useState<number | null>(null);
 
+
+
+  // Options communes pour les toasts
+  const toastOptions = {
+    duration: 4000,
+    style: {
+      padding: '12px',
+      fontSize: '14px',
+    },
+  };
+
+  // Afficher un toast d'erreur
+  const showErrorToast = (message: string) => {
+    toast.error(message, toastOptions);
+  };
+
+  // Afficher un toast de succès
+  const showSuccessToast = (message: string) => {
+    toast.success(message, toastOptions);
+  };
+
+  // Valider un ID de quiz
+  const validateQuizId = (quizId: number | undefined): boolean => {
+    if (!quizId || quizId <= 0) {
+      showErrorToast('ID de quiz invalide');
+      return false;
+    }
+    return true;
+  };
+
+
+  const getAuthHeaders = (): HeadersInit | null => {
+    const token = AuthService.getToken();
+    if (!token) {
+      showErrorToast('Vous devez être connecté pour effectuer cette action');
+      return null;
+    }
+    
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+  };
+
+
+  const makeSecureApiCall = async (url: string, options: RequestInit) => {
+    const headers = getAuthHeaders();
+    if (!headers) return null;
+
+    const response = await fetch(url, {
+      ...options,
+      headers: { ...headers, ...options.headers }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Erreur API:', errorText);
+      throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+    }
+
+    return response;
+  };
+
+
+  // Récupérer les quiz depuis l'API
   const fetchQuizzes = async () => {
     try {
       setIsLoading(true);
@@ -33,17 +99,15 @@ const DashboardPage: React.FC = () => {
       const response = await QuizApiService.getQuizzes();
       console.log('Réponse de l\'API:', response); 
       
-    
+      // Vérifier le format de la réponse
       let quizzesArray: Quiz[];
       if (Array.isArray(response)) {
-        // Réponse directe en tableau
         quizzesArray = response;
       } else if (response && Array.isArray(response.member)) {
-        // Format API Platform (JSON-LD) - les quiz sont dans "member"
         quizzesArray = response.member;
       } else {
         console.error('Format de réponse inattendu:', response);
-        quizzesArray = []; 
+        quizzesArray = [];
       }
       
       setQuizzes(quizzesArray);
@@ -68,59 +132,89 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  // NOUVELLE FONCTION : Mettre à jour le statut d'un quiz
-  const updateQuizStatus = async (quizId: number, isActive: boolean) => {
+  // Mettre à jour le statut d'un quiz
+  const updateQuizStatus = async (quizId: number | undefined, isActive: boolean) => {
+    // Validation côté frontend
+    if (!validateQuizId(quizId)) return;
+    
+    const safeQuizId = quizId!; // On sait qu'il est valide maintenant
+
     try {
-      setUpdatingQuizId(quizId);
+      setUpdatingQuizId(safeQuizId);
       
-      // Récupérer le token depuis les cookies (pas localStorage)
-      const token = AuthService.getToken();
-      if (!token) {
-        toast.error('Vous devez être connecté pour effectuer cette action');
-        return;
-      }
+      const response = await makeSecureApiCall(
+        `http://localhost:8000/api/quizzes/${safeQuizId}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ isActive })
+        }
+      );
 
-      console.log('Token récupéré:', token ? 'Présent' : 'Absent');
-
-      // Appel API via API Platform
-      const response = await fetch(`http://localhost:8000/api/quizzes/${quizId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ isActive })
-      });
-
-      console.log('Réponse API:', response.status, response.statusText);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Erreur API:', errorText);
-        throw new Error(`Erreur ${response.status}: ${response.statusText}`);
-      }
+      if (!response) return; 
 
       // Mettre à jour la liste locale
       setQuizzes(prevQuizzes => 
         prevQuizzes.map(quiz => 
-          quiz.id === quizId 
+          quiz.id === safeQuizId 
             ? { ...quiz, isActive }
             : quiz
         )
       );
 
-      // Message de succès simple
-      if (isActive) {
-        toast.success(' Quiz activé ! Les étudiants peuvent y accéder');
-      } else {
-        toast.success('⏸Quiz désactivé"');
-      }
+     
+      showSuccessToast(
+        isActive 
+          ? 'Quiz activé ! Les étudiants peuvent y accéder' 
+          : 'Quiz désactivé'
+      );
 
     } catch (error) {
       console.error('Erreur lors de la mise à jour du statut:', error);
-      toast.error(' Erreur lors de la mise à jour du statut du quiz');
+      showErrorToast('Erreur lors de la mise à jour du statut du quiz');
     } finally {
       setUpdatingQuizId(null);
+    }
+  };
+
+  // Confirmer et supprimer un quiz
+  const confirmDeleteQuiz = (quizId: number | undefined, quizTitle: string) => {
+    // Validation côté frontend
+    if (!validateQuizId(quizId)) return;
+
+
+    const isConfirmed = window.confirm(
+      `Êtes-vous sûr de vouloir supprimer le quiz "${quizTitle}" ?\n\nCette action est irréversible.`
+    );
+    
+    if (isConfirmed) {
+      deleteQuiz(quizId!);
+    }
+  };
+
+
+  const deleteQuiz = async (quizId: number) => {
+    try {
+      setDeletingQuizId(quizId);
+
+      const response = await makeSecureApiCall(
+        `http://localhost:8000/api/quizzes/${quizId}`,
+        { method: 'DELETE' }
+      );
+
+      if (!response) return; 
+
+   
+      setQuizzes(prevQuizzes => 
+        prevQuizzes.filter(quiz => quiz.id !== quizId)
+      );
+
+      showSuccessToast('Quiz supprimé avec succès');
+
+    } catch (error) {
+      console.error('Erreur lors de la suppression du quiz:', error);
+      showErrorToast('Erreur lors de la suppression du quiz');
+    } finally {
+      setDeletingQuizId(null);
     }
   };
 
@@ -129,7 +223,8 @@ const DashboardPage: React.FC = () => {
     fetchQuizzes();
   }, []);
 
-  // Fonctions de navigation
+
+
   const handleCreateQuiz = () => {
     navigate('/create-quiz');
   };
@@ -139,12 +234,14 @@ const DashboardPage: React.FC = () => {
     navigate('/login');
   };
 
-  const handleViewResults = (quizId: number) => {
+  const handleViewResults = (quizId: number | undefined) => {
+    if (!validateQuizId(quizId)) return;
     console.log(`Voir les résultats du quiz ${quizId}`);
     // Navigation vers les résultats
   };
 
-  const handleEditQuiz = (quizId: number) => {
+  const handleEditQuiz = (quizId: number | undefined) => {
+    if (!validateQuizId(quizId)) return;
     navigate(`/manage-questions/${quizId}`);
   };
 
@@ -157,7 +254,7 @@ const DashboardPage: React.FC = () => {
             Dashboard Admin
           </h1>
           <p className="text-gray-300 text-lg">
-            Gérez vos quiz et activez/désactivez-les et analysez les performances
+            Gérez vos quiz et activez/désactivez-les quiz
           </p>
         </div>
 
@@ -265,7 +362,7 @@ const DashboardPage: React.FC = () => {
                   key={quiz.id}
                   className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200"
                 >
-                  {/* Infos du quiz */}
+           
                   <div className="flex items-center space-x-4">
                     <div>
                       <h3 className="font-semibold text-gray-900">{quiz.title}</h3>
@@ -293,11 +390,11 @@ const DashboardPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Boutons d'action */}
+   
                   <div className="flex gap-2">
-                    {/* NOUVEAU BOUTON TOGGLE */}
+                   
                     <Button
-                      onClick={() => updateQuizStatus(quiz.id || 0, !quiz.isActive)}
+                      onClick={() => updateQuizStatus(quiz.id, !quiz.isActive)}
                       disabled={updatingQuizId === quiz.id}
                       className={`${
                         quiz.isActive 
@@ -316,18 +413,30 @@ const DashboardPage: React.FC = () => {
                     </Button>
                     
                     <Button 
-                      onClick={() => handleEditQuiz(quiz.id || 0)}
+                      onClick={() => handleEditQuiz(quiz.id)}
                       className="bg-blue-600 hover:bg-blue-700 text-white"
                     >
                       <Edit className="w-4 h-4 mr-2" />
                       Modifier
                     </Button>
                     <Button 
-                      onClick={() => handleViewResults(quiz.id || 0)}
+                      onClick={() => handleViewResults(quiz.id)}
                       className="bg-gray-800 hover:bg-gray-700 text-white"
                     >
                       <Eye className="w-4 h-4 mr-2" />
                       Résultat
+                    </Button>
+                    <Button 
+                      onClick={() => confirmDeleteQuiz(quiz.id, quiz.title)}
+                      disabled={deletingQuizId === quiz.id}
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      {deletingQuizId === quiz.id ? (
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4 mr-2" />
+                      )}
+                      {deletingQuizId === quiz.id ? 'Suppression...' : 'Supprimer'}
                     </Button>
                   </div>
                 </div>

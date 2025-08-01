@@ -5,7 +5,7 @@ export type QuestionType = 'multiple_choice' | 'true_false' | 'text' | 'number';
 export interface Answer {
   id?: number;
   text: string;
-  isCorrect: boolean;
+  correct: boolean; // Propriété de l'API Symfony
   orderNumber: number;
   createdAt?: string;
   question: string; // URL de la question parent
@@ -85,6 +85,6 @@ export interface QuestionFormData {
 // Interface pour définir une réponse en cours de création (formulaire)
 export interface AnswerFormData {
   text: string;
-  isCorrect: boolean;
+  correct: boolean;
   orderNumber: number;
 } 
