@@ -1,79 +1,72 @@
-import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuthStore } from '@/store';
+
+
+import type { ReactNode } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import type { Location } from 'react-router-dom';
+import AuthService from '../services/AuthService';
+
+
 
 // Interface pour définir les props du composant ProtectedRoute
 interface ProtectedRouteProps {
-  children: React.ReactNode;
-  requiredRole?: string;
-  redirectTo?: string;
+    children: ReactNode;
+    requiredRole?: string;
+    redirectTo?: string;
 }
 
-// Composant pour protéger les routes selon les rôles
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
-  children, 
-  requiredRole, 
-  redirectTo = '/login' 
-}) => {
-  // Hook pour accéder au store d'authentification
-  const { isAuthenticated, isLoading, hasRole, user } = useAuthStore();
-  
-  // État pour gérer la vérification des rôles
-  const [roleCheckLoading, setRoleCheckLoading] = useState(false);
-  const [hasRequiredRole, setHasRequiredRole] = useState<boolean | null>(null);
+// Interface pour l'état de navigation qui peut être passé avec Navigate
+interface NavigationState {
+    from?: Location;
+    error?: string;
+}
 
-  // Vérifier le rôle requis de manière asynchrone
-  useEffect(() => {
-    const checkRole = async () => {
-      if (!requiredRole || !isAuthenticated) {
-        setHasRequiredRole(true);
-        return;
-      }
+// Type pour les rôles utilisateur supportés
+type UserRole = 'ROLE_ADMIN' | 'ROLE_STUDENT' | 'ROLE_USER' | string;
 
-      setRoleCheckLoading(true);
-      try {
-        const hasRoleResult = await hasRole(requiredRole);
-        setHasRequiredRole(hasRoleResult);
-      } catch {
-        setHasRequiredRole(false);
-      } finally {
-        setRoleCheckLoading(false);
-      }
-    };
+// Type pour l'état d'authentification
+type AuthenticationStatus = boolean;
 
-    checkRole();
-  }, [requiredRole, isAuthenticated, hasRole]);
+// Type pour le statut de vérification des rôles
+type RoleCheckResult = boolean;
 
-  // Affichage d'un loader pendant la vérification de l'authentification ou des rôles
-  if (isLoading || roleCheckLoading) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">
-          {isLoading ? 'Chargement...' : 'Vérification des permissions...'}
-        </div>
-      </div>
-    );
-  }
 
-  // Si l'utilisateur n'est pas connecté, rediriger vers la page de connexion
-  if (!isAuthenticated) {
-    return <Navigate to={redirectTo} replace />;
-  }
+function ProtectedRoute({ 
+    children, 
+    requiredRole, 
+    redirectTo = '/login' 
+}: ProtectedRouteProps) {
+    // Hook pour récupérer l'URL actuelle
+    const location: Location = useLocation();
 
-  // Si un rôle spécifique est requis et que l'utilisateur ne l'a pas
-  if (requiredRole && hasRequiredRole === false) {
-    // Rediriger vers la page appropriée selon le rôle de l'utilisateur
-    if (user?.roles?.includes('ROLE_ADMIN')) {
-      return <Navigate to="/admin-dashboard" replace />;
-    } else if (user?.roles?.includes('ROLE_USER')) {
-      return <Navigate to="/student" replace />;
-    } else {
-      return <Navigate to="/login" replace />;
+    // Vérifie si l'utilisateur est authentifié
+    const isAuthenticated: AuthenticationStatus = AuthService.isAuthenticated();
+
+    // Si l'utilisateur n'est pas connecté, on le redirige vers la page de connexion
+    if (!isAuthenticated) {
+        // On sauvegarde l'URL actuelle pour rediriger après connexion
+        const navigationState: NavigationState = { from: location };
+        
+        return <Navigate to={redirectTo} state={navigationState} replace />;
     }
-  }
 
-  // Si tout est OK, afficher le contenu protégé
-  return <>{children}</>;
-};
+    // Si un rôle spécifique est requis, on vérifie que l'utilisateur l'a
+    if (requiredRole) {
+        const hasRequiredRole: RoleCheckResult = AuthService.hasRole(requiredRole as UserRole);
 
-export default ProtectedRoute; 
+        if (!hasRequiredRole) {
+            // Si l'utilisateur n'a pas le bon rôle, on le redirige
+            // On peut rediriger vers une page d'erreur ou vers login
+            const navigationState: NavigationState = { 
+                from: location, 
+                error: 'Accès non autorisé' 
+            };
+            
+            return <Navigate to={redirectTo} state={navigationState} replace />;
+        }
+    }
+
+    // Si toutes les vérifications passent, on affiche le contenu
+    return <>{children}</>;
+}
+
+export default ProtectedRoute;
