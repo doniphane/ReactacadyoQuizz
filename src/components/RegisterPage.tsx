@@ -72,7 +72,9 @@ type EventHandler = () => void;
 type FormSubmitHandler = (event: FormEvent<HTMLFormElement>) => Promise<void>;
 type InputChangeHandler = (e: ChangeEvent<HTMLInputElement>) => void;
 
-
+// =============================================================================
+// COMPOSANT PRINCIPAL
+// =============================================================================
 
 // URL de base de l'API Symfony
 const API_BASE_URL: string = 'http://localhost:8000';

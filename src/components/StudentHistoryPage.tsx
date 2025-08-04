@@ -1,9 +1,9 @@
+// Composant de page Historique des Quiz pour les étudiants
 
 import { useEffect, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import type { AxiosResponse } from 'axios';
 
 // Import des composants Shadcn UI
 import { Button } from '@/components/ui/button';
@@ -21,13 +21,13 @@ import {
     Eye,
     Search,
     Trophy,
-    Clock,
-    User
+    Clock
 } from 'lucide-react';
 
 // Import du service d'authentification
 import AuthService from '../services/AuthService';
 import toast from 'react-hot-toast';
+
 
 
 // Interface pour les informations utilisateur
@@ -39,20 +39,7 @@ interface User {
     roles: string[];
 }
 
-// Interface pour une tentative de quiz (données brutes de l'API)
-interface RawQuizAttempt {
-    id: number;
-    quiz: string; 
-    participantEmail?: string;
-    participantFirstName: string;
-    participantLastName: string;
-    startedAt: string;
-    score: number;
-    totalQuestions: number;
-    quizTitle?: string;
-    quizCode?: string;
-    completedAt?: string;
-}
+
 
 // Interface pour une tentative transformée pour l'affichage
 interface TransformedAttempt {
@@ -67,32 +54,30 @@ interface TransformedAttempt {
     isPassed: boolean;
 }
 
-// Interface pour une question (données brutes de l'API)
+// Interface pour une question
 interface Question {
     id: number;
     text: string;
-    quiz: string; // URL de référence vers le quiz
-    orderNumber?: number;
+    quiz: string;
 }
 
-// Interface pour une réponse possible (données brutes de l'API)
+// Interface pour une réponse
 interface Answer {
     id: number;
     text: string;
     correct: boolean;
-    question: string; // URL de référence vers la question
-    orderNumber?: number;
+    question: string;
 }
 
-// Interface pour une réponse utilisateur (données brutes de l'API)
+// Interface pour une réponse utilisateur
 interface UserAnswer {
     id: number;
-    question: string; // URL de référence vers la question
-    answer: string; // URL de référence vers la réponse
-    quizAttempt: string; // URL de référence vers la tentative
+    question: string;
+    answer: string;
+    quizAttempt: string;
 }
 
-// Interface pour les détails d'une réponse formatée pour l'affichage
+// Interface pour les détails d'une réponse
 interface AttemptDetail {
     questionId: string;
     questionText: string;
@@ -101,114 +86,96 @@ interface AttemptDetail {
     isCorrect: boolean;
 }
 
-// Interface pour les réponses API au format JSON-LD
-interface ApiResponse<T> {
-    member?: T[];
-    'hydra:member'?: T[];
-}
+// URL de l'API
+const API_BASE_URL = 'http://localhost:8000';
 
-
-type ApiResponseFormat<T> = T[] | ApiResponse<T>;
-
-// Types pour les états du composant
-type QuizAttemptsState = TransformedAttempt[];
-type SelectedAttemptState = TransformedAttempt | null;
-type AttemptDetailsState = AttemptDetail[];
-type SearchTermState = string;
-type LoadingState = boolean;
-type ErrorState = string | null;
-
-// Types pour les fonctions
-type EventHandler = () => void;
-type ParameterizedEventHandler<P, T = void> = (param: P) => T;
-type AsyncEventHandler<P = void> = (param?: P) => Promise<void>;
-
-
-// URL de base de l'API Symfony
-const API_BASE_URL: string = 'http://localhost:8000';
 
 function StudentHistoryPage() {
-  
+    // Hook pour la navigation entre les pages
     const navigate = useNavigate();
 
     // États pour les données
-    const [quizAttempts, setQuizAttempts] = useState<QuizAttemptsState>([]);
-    const [selectedAttempt, setSelectedAttempt] = useState<SelectedAttemptState>(null);
-    const [attemptDetails, setAttemptDetails] = useState<AttemptDetailsState>([]);
-    const [searchTerm, setSearchTerm] = useState<SearchTermState>('');
-    const [isLoading, setIsLoading] = useState<LoadingState>(true);
-    const [error, setError] = useState<ErrorState>(null);
-    const [loadingDetails, setLoadingDetails] = useState<LoadingState>(false);
+    const [quizAttempts, setQuizAttempts] = useState<TransformedAttempt[]>([]);
+    const [selectedAttempt, setSelectedAttempt] = useState<TransformedAttempt | null>(null);
+    const [attemptDetails, setAttemptDetails] = useState<AttemptDetail[]>([]);
+    const [searchTerm, setSearchTerm] = useState<string>('');
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+    const [loadingDetails, setLoadingDetails] = useState<boolean>(false);
 
-
-    const getAuthHeaders = (): Record<string, string> | null => {
-        const token: string | null = AuthService.getToken();
+    // Fonction pour obtenir le token
+    const getToken = (): string | null => {
+        const token = AuthService.getToken();
         if (!token) {
-            console.error('Token non trouvé');
+            toast.error('Vous devez être connecté');
+            navigate('/login');
             return null;
         }
-
-        return {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        };
+        return token;
     };
 
-  
-    const makeSecureApiCall = async <T = unknown>(url: string, options: Record<string, string> = {}): Promise<AxiosResponse<T>> => {
-        const headers: Record<string, string> | null = getAuthHeaders();
-        if (!headers) {
+    // Fonction pour faire des appels API sécurisés
+    const makeSecureApiCall = async (url: string) => {
+        const token = getToken();
+        if (!token) {
             throw new Error('Vous devez être connecté pour effectuer cette action');
         }
 
-        const response: AxiosResponse<T> = await axios({
-            url,
-            ...options,
-            headers: { ...headers, ...options }
+        const response = await axios.get(url, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
         });
 
         return response;
     };
 
-    
+    // Charger l'historique des quiz au montage du composant
     useEffect(() => {
-        const loadQuizHistory: AsyncEventHandler = async (): Promise<void> => {
+        const loadQuizHistory = async (): Promise<void> => {
             try {
                 setIsLoading(true);
                 setError(null);
 
                 // Récupérer les informations de l'utilisateur connecté
-                const userResponse: AxiosResponse<User> = await makeSecureApiCall<User>(`${API_BASE_URL}/api/me`);
+                const userResponse = await makeSecureApiCall(`${API_BASE_URL}/api/me`);
                 const currentUser: User = userResponse.data;
 
                 // Récupérer les tentatives de l'utilisateur connecté
-                const response: AxiosResponse<ApiResponseFormat<RawQuizAttempt>> = await makeSecureApiCall<ApiResponseFormat<RawQuizAttempt>>(`${API_BASE_URL}/api/quiz_attempts`);
-                let attemptsArray: RawQuizAttempt[] = [];
+                const response = await makeSecureApiCall(`${API_BASE_URL}/api/quiz_attempts`);
+                let attemptsArray: Array<{
+                    id: number;
+                    quiz: string;
+                    participantEmail?: string;
+                    participantFirstName: string;
+                    participantLastName: string;
+                    startedAt: string;
+                    score: number;
+                    totalQuestions: number;
+                    quizTitle?: string;
+                    quizCode?: string;
+                }> = [];
 
                 // Gérer le format de réponse JSON-LD
                 if (Array.isArray(response.data)) {
                     attemptsArray = response.data;
-                } else if (response.data && Array.isArray((response.data as ApiResponse<RawQuizAttempt>).member)) {
-                    attemptsArray = (response.data as ApiResponse<RawQuizAttempt>).member!;
-                } else if (response.data && Array.isArray((response.data as ApiResponse<RawQuizAttempt>)['hydra:member'])) {
-                    attemptsArray = (response.data as ApiResponse<RawQuizAttempt>)['hydra:member']!;
+                } else if (response.data.member) {
+                    attemptsArray = response.data.member;
+                } else if (response.data['hydra:member']) {
+                    attemptsArray = response.data['hydra:member'];
                 }
 
                 // Filtrer les tentatives pour l'utilisateur connecté uniquement
-                const userAttempts: RawQuizAttempt[] = attemptsArray.filter((attempt: RawQuizAttempt) => {
-                    // Vérifier si la tentative appartient à l'utilisateur connecté
+                const userAttempts = attemptsArray.filter((attempt) => {
                     return attempt.participantEmail === currentUser.email ||
                         attempt.participantFirstName === currentUser.firstName ||
                         (attempt.participantFirstName && attempt.participantLastName &&
                             `${attempt.participantFirstName} ${attempt.participantLastName}` === `${currentUser.firstName} ${currentUser.lastName}`);
                 });
 
-                console.log('Utilisateur connecté:', currentUser);
-                console.log('Tentatives filtrées:', userAttempts);
-
                 // Transformer les données des tentatives
-                const attemptsData: TransformedAttempt[] = userAttempts.map((attempt: RawQuizAttempt): TransformedAttempt => {
-                    const percentage: number = attempt.totalQuestions > 0
+                const attemptsData: TransformedAttempt[] = userAttempts.map((attempt) => {
+                    const percentage = attempt.totalQuestions > 0
                         ? Math.round((attempt.score / attempt.totalQuestions) * 100)
                         : 0;
 
@@ -239,45 +206,45 @@ function StudentHistoryPage() {
     }, []);
 
     // Fonction pour charger les détails d'une tentative
-    const loadAttemptDetails: ParameterizedEventHandler<TransformedAttempt, Promise<void>> = async (attempt: TransformedAttempt): Promise<void> => {
+    const loadAttemptDetails = async (attempt: TransformedAttempt): Promise<void> => {
         try {
             setLoadingDetails(true);
             setSelectedAttempt(attempt);
 
             // Récupérer les questions du quiz
-            const questionsResponse: AxiosResponse<ApiResponseFormat<Question>> = await makeSecureApiCall<ApiResponseFormat<Question>>(`${API_BASE_URL}/api/questions`);
+            const questionsResponse = await makeSecureApiCall(`${API_BASE_URL}/api/questions`);
             let questionsArray: Question[] = [];
 
             if (Array.isArray(questionsResponse.data)) {
                 questionsArray = questionsResponse.data;
-            } else if (questionsResponse.data && Array.isArray((questionsResponse.data as ApiResponse<Question>).member)) {
-                questionsArray = (questionsResponse.data as ApiResponse<Question>).member!;
-            } else if (questionsResponse.data && Array.isArray((questionsResponse.data as ApiResponse<Question>)['hydra:member'])) {
-                questionsArray = (questionsResponse.data as ApiResponse<Question>)['hydra:member']!;
+            } else if (questionsResponse.data.member) {
+                questionsArray = questionsResponse.data.member;
+            } else if (questionsResponse.data['hydra:member']) {
+                questionsArray = questionsResponse.data['hydra:member'];
             }
 
             // Récupérer toutes les réponses possibles
-            const answersResponse: AxiosResponse<ApiResponseFormat<Answer>> = await makeSecureApiCall<ApiResponseFormat<Answer>>(`${API_BASE_URL}/api/answers`);
+            const answersResponse = await makeSecureApiCall(`${API_BASE_URL}/api/answers`);
             let answersArray: Answer[] = [];
 
             if (Array.isArray(answersResponse.data)) {
                 answersArray = answersResponse.data;
-            } else if (answersResponse.data && Array.isArray((answersResponse.data as ApiResponse<Answer>).member)) {
-                answersArray = (answersResponse.data as ApiResponse<Answer>).member!;
-            } else if (answersResponse.data && Array.isArray((answersResponse.data as ApiResponse<Answer>)['hydra:member'])) {
-                answersArray = (answersResponse.data as ApiResponse<Answer>)['hydra:member']!;
+            } else if (answersResponse.data.member) {
+                answersArray = answersResponse.data.member;
+            } else if (answersResponse.data['hydra:member']) {
+                answersArray = answersResponse.data['hydra:member'];
             }
 
             // Récupérer les réponses utilisateur
-            const userAnswersResponse: AxiosResponse<ApiResponseFormat<UserAnswer>> = await makeSecureApiCall<ApiResponseFormat<UserAnswer>>(`${API_BASE_URL}/api/user_answers`);
+            const userAnswersResponse = await makeSecureApiCall(`${API_BASE_URL}/api/user_answers`);
             let userAnswersArray: UserAnswer[] = [];
 
             if (Array.isArray(userAnswersResponse.data)) {
                 userAnswersArray = userAnswersResponse.data;
-            } else if (userAnswersResponse.data && Array.isArray((userAnswersResponse.data as ApiResponse<UserAnswer>).member)) {
-                userAnswersArray = (userAnswersResponse.data as ApiResponse<UserAnswer>).member!;
-            } else if (userAnswersResponse.data && Array.isArray((userAnswersResponse.data as ApiResponse<UserAnswer>)['hydra:member'])) {
-                userAnswersArray = (userAnswersResponse.data as ApiResponse<UserAnswer>)['hydra:member']!;
+            } else if (userAnswersResponse.data.member) {
+                userAnswersArray = userAnswersResponse.data.member;
+            } else if (userAnswersResponse.data['hydra:member']) {
+                userAnswersArray = userAnswersResponse.data['hydra:member'];
             }
 
             // Filtrer les réponses pour cette tentative
@@ -287,12 +254,12 @@ function StudentHistoryPage() {
 
             // Créer les détails des réponses
             const details: AttemptDetail[] = studentAnswers.map((userAnswer: UserAnswer): AttemptDetail => {
-                const questionId: string = userAnswer.question.split('/').pop()!;
-                const question: Question | undefined = questionsArray.find((q: Question) => q.id === parseInt(questionId));
-                const allQuestionAnswers: Answer[] = answersArray.filter((a: Answer) => a.question === `/api/questions/${questionId}`);
-                const answerId: string = userAnswer.answer.split('/').pop()!;
-                const selectedAnswer: Answer | undefined = allQuestionAnswers.find((a: Answer) => a.id === parseInt(answerId));
-                const correctAnswer: Answer | undefined = allQuestionAnswers.find((a: Answer) => a.correct === true);
+                const questionId = userAnswer.question.split('/').pop() || '0';
+                const question = questionsArray.find((q: Question) => q.id === parseInt(questionId));
+                const allQuestionAnswers = answersArray.filter((a: Answer) => a.question === `/api/questions/${questionId}`);
+                const answerId = userAnswer.answer.split('/').pop() || '0';
+                const selectedAnswer = allQuestionAnswers.find((a: Answer) => a.id === parseInt(answerId));
+                const correctAnswer = allQuestionAnswers.find((a: Answer) => a.correct === true);
 
                 return {
                     questionId: questionId,
@@ -314,7 +281,7 @@ function StudentHistoryPage() {
     };
 
     // Fonction pour retourner à la page étudiant
-    const handleBackToStudent: EventHandler = (): void => {
+    const handleBackToStudent = (): void => {
         navigate('/student');
     };
 
@@ -348,7 +315,7 @@ function StudentHistoryPage() {
                 <div className="max-w-6xl mx-auto text-center">
                     <h1 className="text-2xl font-bold mb-4">Erreur</h1>
                     <p className="text-gray-300 mb-4">{error}</p>
-                    <Button onClick={handleBackToStudent} className="bg-yellow-400 hover:bg-yellow-500 text-gray-900">
+                    <Button onClick={handleBackToStudent} className="bg-white hover:bg-yellow-500 text-gray-900">
                         Retour à l'accueil
                     </Button>
                 </div>
@@ -363,7 +330,7 @@ function StudentHistoryPage() {
                 <div className="flex justify-between items-center mb-8">
                     <Button
                         onClick={handleBackToStudent}
-                        className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-300"
+                        className="bg-white hover:bg-yellow-600 text-gray-900"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Retour à l'accueil

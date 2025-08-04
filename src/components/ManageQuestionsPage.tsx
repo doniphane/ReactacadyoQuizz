@@ -1,4 +1,5 @@
 
+
 import { useState, useEffect } from 'react';
 import type { FormEvent, ChangeEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -20,13 +21,11 @@ import { ArrowLeft, Plus, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import AuthService from '../services/AuthService';
 
 
-
-// Interface pour une réponse à une question
+// Interface pour une réponse
 interface Answer {
     id?: number;
     text: string;
     correct: boolean;
-    orderNumber?: number;
 }
 
 // Interface pour une question
@@ -34,17 +33,9 @@ interface Question {
     id?: number;
     text: string;
     answers: Answer[];
-    orderNumber?: number;
 }
 
-// Interface pour un utilisateur/professeur
-interface Teacher {
-    id: number;
-    email: string;
-    name?: string;
-}
-
-// Interface pour un quiz complet
+// Interface pour un quiz
 interface Quiz {
     id: number;
     title: string;
@@ -53,67 +44,26 @@ interface Quiz {
     isActive: boolean;
     isStarted: boolean;
     passingScore: number;
-    teacher?: Teacher;
     questions: Question[];
-}
-
-// Interface pour les données brutes du quiz venant de l'API
-interface RawQuizData {
-    id?: number;
-    title: string;
-    description?: string;
-    uniqueCode?: string;
-    isActive: boolean;
-    isStarted: boolean;
-    passingScore: number;
-    teacher?: Teacher;
-    questions?: Question[];
 }
 
 // Interface pour une nouvelle question en cours de création
 interface NewQuestion {
     text: string;
-    answers: NewAnswer[];
-}
-
-// Interface pour une nouvelle réponse en cours de création
-interface NewAnswer {
-    text: string;
-    correct: boolean;
+    answers: Array<{
+        text: string;
+        correct: boolean;
+    }>;
 }
 
 // Interface pour les données d'une question à envoyer à l'API
 interface QuestionToSubmit {
     text: string;
-    answers: AnswerToSubmit[];
+    answers: Array<{
+        text: string;
+        correct: boolean;
+    }>;
 }
-
-// Interface pour les données d'une réponse à envoyer à l'API
-interface AnswerToSubmit {
-    text: string;
-    correct: boolean;
-}
-
-// Interface pour les réponses d'erreur de l'API
-interface ApiErrorResponse {
-    message?: string;
-    errors?: string[];
-}
-
-// Interface pour les erreurs Axios personnalisées
-interface CustomAxiosError extends AxiosError {
-    response?: AxiosResponse<ApiErrorResponse>;
-    request?: unknown;
-}
-
-// Type pour les champs modifiables d'une réponse
-type AnswerField = 'text' | 'correct';
-
-// Type pour l'état de chargement
-type LoadingState = boolean;
-
-// Type pour l'état d'erreur
-type ErrorState = string | null;
 
 
 
@@ -129,8 +79,8 @@ function ManageQuestionsPage() {
 
     // États pour les données
     const [quiz, setQuiz] = useState<Quiz | null>(null);
-    const [isLoading, setIsLoading] = useState<LoadingState>(true);
-    const [error, setError] = useState<ErrorState>(null);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
 
     // États pour le formulaire d'ajout de question
     const [newQuestion, setNewQuestion] = useState<NewQuestion>({
@@ -140,7 +90,7 @@ function ManageQuestionsPage() {
             { text: '', correct: false }
         ]
     });
-    const [isSubmitting, setIsSubmitting] = useState<LoadingState>(false);
+    const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
     // Fonction pour récupérer les données du quiz
     const fetchQuiz = async (): Promise<void> => {
@@ -158,7 +108,7 @@ function ManageQuestionsPage() {
             }
 
             // Appeler l'API pour récupérer le quiz avec ses questions
-            const response: AxiosResponse<RawQuizData> = await axios.get < RawQuizData > (
+            const response: AxiosResponse<Quiz> = await axios.get<Quiz>(
                 `${API_BASE_URL}/api/quizzes/${quizId}`,
                 {
                     headers: {
@@ -167,31 +117,15 @@ function ManageQuestionsPage() {
                 }
             );
 
-            const quizData: RawQuizData = response.data;
-            console.log('Quiz récupéré:', quizData);
-
-            // Transformer les données pour correspondre à notre interface
-            const transformedQuiz: Quiz = {
-                id: quizData.id || 0,
-                title: quizData.title,
-                description: quizData.description,
-                uniqueCode: quizData.uniqueCode || 'N/A',
-                isActive: quizData.isActive,
-                isStarted: quizData.isStarted,
-                passingScore: quizData.passingScore,
-                teacher: quizData.teacher,
-                questions: quizData.questions || []
-            };
-
-            setQuiz(transformedQuiz);
+            setQuiz(response.data);
 
         } catch (error) {
             console.error('Erreur lors de la récupération du quiz:', error);
-            const customError = error as CustomAxiosError;
-
-            if (customError.response?.status === 404) {
+            const axiosError = error as AxiosError;
+            
+            if (axiosError.response?.status === 404) {
                 setError('Quiz non trouvé');
-            } else if (customError.response?.status === 403) {
+            } else if (axiosError.response?.status === 403) {
                 setError('Vous n\'êtes pas autorisé à accéder à ce quiz');
             } else {
                 setError('Erreur lors du chargement du quiz');
@@ -208,19 +142,9 @@ function ManageQuestionsPage() {
 
     // Fonction pour ajouter une réponse au formulaire
     const handleAddAnswer = (): void => {
-        setNewQuestion((prev: NewQuestion) => ({
+        setNewQuestion((prev) => ({
             ...prev,
             answers: [...prev.answers, { text: '', correct: false }]
-        }));
-    };
-
-    // Fonction pour mettre à jour une réponse
-    const handleAnswerChange = (index: number, field: AnswerField, value: string | boolean): void => {
-        setNewQuestion((prev: NewQuestion) => ({
-            ...prev,
-            answers: prev.answers.map((answer: NewAnswer, i: number) =>
-                i === index ? { ...answer, [field]: value } : answer
-            )
         }));
     };
 
@@ -228,15 +152,15 @@ function ManageQuestionsPage() {
     const handleRemoveAnswer = (index: number): void => {
         if (newQuestion.answers.length <= 2) return;
 
-        setNewQuestion((prev: NewQuestion) => ({
+        setNewQuestion((prev) => ({
             ...prev,
-            answers: prev.answers.filter((_: NewAnswer, i: number) => i !== index)
+            answers: prev.answers.filter((_, i) => i !== index)
         }));
     };
 
     // Fonction pour gérer le changement du texte de la question
     const handleQuestionTextChange = (e: ChangeEvent<HTMLTextAreaElement>): void => {
-        setNewQuestion((prev: NewQuestion) => ({
+        setNewQuestion((prev) => ({
             ...prev,
             text: e.target.value
         }));
@@ -244,12 +168,22 @@ function ManageQuestionsPage() {
 
     // Fonction pour gérer le changement du texte d'une réponse
     const handleAnswerTextChange = (index: number, e: ChangeEvent<HTMLInputElement>): void => {
-        handleAnswerChange(index, 'text', e.target.value);
+        setNewQuestion((prev) => ({
+            ...prev,
+            answers: prev.answers.map((answer, i) =>
+                i === index ? { ...answer, text: e.target.value } : answer
+            )
+        }));
     };
 
     // Fonction pour gérer le changement du statut correct d'une réponse
     const handleAnswerCorrectChange = (index: number, e: ChangeEvent<HTMLInputElement>): void => {
-        handleAnswerChange(index, 'correct', e.target.checked);
+        setNewQuestion((prev) => ({
+            ...prev,
+            answers: prev.answers.map((answer, i) =>
+                i === index ? { ...answer, correct: e.target.checked } : answer
+            )
+        }));
     };
 
     // Fonction pour soumettre une nouvelle question
@@ -258,7 +192,7 @@ function ManageQuestionsPage() {
 
         if (!quiz) return;
 
-        // Validation
+        // Validation simple
         if (!newQuestion.text.trim()) {
             alert('Le texte de la question est obligatoire');
             return;
@@ -269,7 +203,7 @@ function ManageQuestionsPage() {
             return;
         }
 
-        const hasCorrectAnswer: boolean = newQuestion.answers.some((answer: NewAnswer) => answer.correct);
+        const hasCorrectAnswer: boolean = newQuestion.answers.some((answer) => answer.correct);
         if (!hasCorrectAnswer) {
             alert('Il faut au moins une réponse correcte');
             return;
@@ -288,14 +222,14 @@ function ManageQuestionsPage() {
             // Préparer les données de la question
             const questionData: QuestionToSubmit = {
                 text: newQuestion.text.trim(),
-                answers: newQuestion.answers.map((answer: NewAnswer): AnswerToSubmit => ({
+                answers: newQuestion.answers.map((answer) => ({
                     text: answer.text.trim(),
                     correct: answer.correct
                 }))
             };
 
             // Appel API pour ajouter une question
-            const response: AxiosResponse<Question> = await axios.post < Question > (
+            await axios.post<Question>(
                 `${API_BASE_URL}/api/quizzes/${quiz.id}/questions`,
                 questionData,
                 {
@@ -305,8 +239,6 @@ function ManageQuestionsPage() {
                     }
                 }
             );
-
-            console.log('Question ajoutée:', response.data);
 
             // Réinitialiser le formulaire
             setNewQuestion({
@@ -324,22 +256,20 @@ function ManageQuestionsPage() {
 
         } catch (error) {
             console.error('Erreur lors de l\'ajout de la question:', error);
-            const customError = error as CustomAxiosError;
+            const axiosError = error as AxiosError;
 
             let errorMessage: string = 'Erreur lors de l\'ajout de la question';
 
-            if (customError.response) {
-                const status: number = customError.response.status;
+            if (axiosError.response) {
+                const status: number = axiosError.response.status;
                 if (status === 401) {
                     errorMessage = 'Vous devez être connecté pour ajouter une question';
                 } else if (status === 403) {
                     errorMessage = 'Vous n\'êtes pas autorisé à modifier ce quiz';
                 } else if (status === 400) {
-                    errorMessage = customError.response.data?.message || 'Données invalides';
-                } else {
-                    errorMessage = customError.response.data?.message || errorMessage;
+                    errorMessage = 'Données invalides';
                 }
-            } else if (customError.request) {
+            } else if (axiosError.request) {
                 errorMessage = 'Problème de connexion au serveur';
             }
 
@@ -369,10 +299,10 @@ function ManageQuestionsPage() {
     // Affichage d'erreur
     if (error || !quiz) {
         return (
-            <div className="min-h-screen bg-gray-900 text-white p-6">
+            <div className="min-h-screen bg-gray-900 text-black p-6">
                 <div className="text-center py-8">
                     <p className="text-red-400 mb-4">{error || 'Quiz non trouvé'}</p>
-                    <Button onClick={handleBackToDashboard} className="bg-blue-600 hover:bg-blue-700">
+                    <Button onClick={handleBackToDashboard} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900">
                         Retour au dashboard
                     </Button>
                 </div>
@@ -389,7 +319,7 @@ function ManageQuestionsPage() {
                     <Button
                         onClick={handleBackToDashboard}
                         variant="outline"
-                        className="border-gray-600 text-white hover:bg-gray-800"
+                        className="border-gray-600 text-black hover:bg-gray-800 hover:text-white"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Retour au dashboard
@@ -425,7 +355,6 @@ function ManageQuestionsPage() {
                             ) : (
                                 <div className="space-y-4">
                                     {Array.isArray(quiz.questions) ? quiz.questions
-                                        .sort((a: Question, b: Question) => (a.orderNumber || 0) - (b.orderNumber || 0))
                                         .map((question: Question, index: number) => (
                                             <div key={`question-${question.id || index}-${index}`} className="border border-gray-200 rounded-lg p-4 bg-white">
                                                 <h5 className="font-semibold text-gray-900 mb-3">
@@ -433,7 +362,6 @@ function ManageQuestionsPage() {
                                                 </h5>
                                                 <div className="ml-4 space-y-3">
                                                     {question.answers && Array.isArray(question.answers) && question.answers
-                                                        .sort((a: Answer, b: Answer) => (a.orderNumber || 0) - (b.orderNumber || 0))
                                                         .map((answer: Answer, answerIndex: number) => (
                                                             <div
                                                                 key={`answer-${answer.id || answerIndex}-${index}-${answerIndex}`}
@@ -525,7 +453,7 @@ function ManageQuestionsPage() {
                                 <div className="mb-4">
                                     <Label className="text-sm font-medium">Réponses <span className="text-red-500">*</span></Label>
                                     <div className="space-y-3 mt-2">
-                                        {newQuestion.answers.map((answer: NewAnswer, index: number) => (
+                                        {newQuestion.answers.map((answer, index: number) => (
                                             <div
                                                 key={`answer-${index}`}
                                                 className={`p-3 rounded-lg border-2 ${answer.correct
@@ -599,7 +527,7 @@ function ManageQuestionsPage() {
                                 {/* Bouton de soumission */}
                                 <Button
                                     type="submit"
-                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                                    className="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900"
                                     disabled={isSubmitting}
                                 >
                                     {isSubmitting ? (

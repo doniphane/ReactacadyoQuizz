@@ -1,11 +1,11 @@
-
+// Composant de page TakeQuiz
 
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
 import axios from 'axios';
-import type { AxiosResponse, AxiosError } from 'axios';
+import type { AxiosError } from 'axios';
 
 // Import des composants Shadcn UI
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,9 @@ import { Card, CardContent } from '@/components/ui/card';
 
 // Import des icônes Lucide React
 import { ArrowLeft } from 'lucide-react';
+
+// Import du service d'authentification
+import AuthService from '../services/AuthService';
 
 
 
@@ -34,15 +37,7 @@ interface QuizInfo {
     passingScore?: number;
 }
 
-// Interface pour une réponse (données brutes de l'API)
-interface RawAnswerData {
-    id: number;
-    text: string;
-    orderNumber: number;
-    isCorrect: boolean;
-}
-
-// Interface pour une réponse transformée
+// Interface pour une réponse
 interface Answer {
     id: number;
     text: string;
@@ -50,15 +45,7 @@ interface Answer {
     isCorrect: boolean;
 }
 
-// Interface pour une question (données brutes de l'API)
-interface RawQuestionData {
-    id: number;
-    text: string;
-    orderNumber: number;
-    answers: RawAnswerData[];
-}
-
-// Interface pour une question transformée
+// Interface pour une question
 interface Question {
     id: number;
     text: string;
@@ -66,12 +53,22 @@ interface Question {
     answers: Answer[];
 }
 
-// Interface pour les données complètes du quiz récupérées de l'API
+// Interface pour les données complètes du quiz
 interface QuizData {
     id: number;
     title: string;
     description?: string;
-    questions: RawQuestionData[];
+    questions: Array<{
+        id: number;
+        text: string;
+        orderNumber: number;
+        answers: Array<{
+            id: number;
+            text: string;
+            orderNumber: number;
+            isCorrect: boolean;
+        }>;
+    }>;
     isActive: boolean;
     isStarted: boolean;
     uniqueCode: string;
@@ -94,7 +91,7 @@ interface CustomLocation extends Omit<Location, 'state'> {
 
 // Interface pour les données de création d'une tentative de quiz
 interface AttemptCreationData {
-    quiz: string; // URL de référence vers le quiz
+    quiz: string;
     participantFirstName: string;
     participantLastName: string;
 }
@@ -124,34 +121,10 @@ interface QuizResults {
     responseDetails?: unknown[];
 }
 
-// Interface pour les réponses d'erreur de l'API
-interface ApiErrorResponse {
-    message?: string;
-    error?: string;
-}
-
-// Interface pour les erreurs Axios personnalisées
-interface CustomAxiosError extends AxiosError {
-    response?: AxiosResponse<ApiErrorResponse>;
-}
-
-// Types pour les états du composant
-type QuestionsState = Question[];
-type UserAnswersState = UserAnswers;
-type LoadingState = boolean;
-type SubmittingState = boolean;
-type CurrentQuestionIndexState = number;
-
-// Types pour les gestionnaires d'événements
-type AnswerSelectHandler = (questionId: number, answerId: number) => void;
-type NextQuestionHandler = () => void;
-type SubmitQuizHandler = (event: FormEvent<HTMLFormElement>) => Promise<void>;
-type BackHandler = () => void;
-type EventHandler = () => void;
+// URL de l'API
+const API_BASE_URL = 'http://localhost:8000';
 
 
-// URL de base de l'API Symfony
-const API_BASE_URL: string = 'http://localhost:8000';
 
 function TakeQuizPage() {
     // Hook pour la navigation entre les pages
@@ -162,35 +135,47 @@ function TakeQuizPage() {
     const { participantData, quizInfo }: Partial<LocationState> = location.state || {};
 
     // État pour stocker les questions du quiz
-    const [questions, setQuestions] = useState<QuestionsState>([]);
+    const [questions, setQuestions] = useState<Question[]>([]);
 
     // État pour stocker les réponses de l'utilisateur
-    const [userAnswers, setUserAnswers] = useState<UserAnswersState>({});
+    const [userAnswers, setUserAnswers] = useState<UserAnswers>({});
 
     // État pour indiquer si on charge les questions
-    const [isLoading, setIsLoading] = useState<LoadingState>(true);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
 
     // État pour indiquer si on soumet les réponses
-    const [isSubmitting, setIsSubmitting] = useState<SubmittingState>(false);
+    const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
     // État pour la question actuelle (pour l'affichage une par une)
-    const [currentQuestionIndex, setCurrentQuestionIndex] = useState<CurrentQuestionIndexState>(0);
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
 
     // Charger les questions du quiz au montage du composant
     useEffect(() => {
         const loadQuestions = async (): Promise<void> => {
             try {
-                // Appeler l'API pour récupérer le quiz avec ses questions (route publique)
-                const response: AxiosResponse<QuizData> = await axios.get<QuizData>(`${API_BASE_URL}/api/public/quizzes/${quizInfo!.id}`);
+                // Récupérer le token d'authentification
+                const token = AuthService.getToken();
+                if (!token) {
+                    alert('Vous devez être connecté pour participer à un quiz');
+                    navigate('/login');
+                    return;
+                }
+
+                // Appeler l'API pour récupérer le quiz avec ses questions avec authentification
+                const response = await axios.get<QuizData>(`${API_BASE_URL}/api/public/quizzes/${quizInfo!.id}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
                 const quizData: QuizData = response.data;
-                const questionsData: RawQuestionData[] = quizData.questions || [];
+                const questionsData = quizData.questions || [];
 
                 // Transformer les données pour correspondre à notre interface
-                const transformedQuestions: Question[] = questionsData.map((questionData: RawQuestionData): Question => ({
+                const transformedQuestions: Question[] = questionsData.map((questionData): Question => ({
                     id: questionData.id,
                     text: questionData.text,
                     orderNumber: questionData.orderNumber,
-                    answers: questionData.answers.map((answerData: RawAnswerData): Answer => ({
+                    answers: questionData.answers.map((answerData): Answer => ({
                         id: answerData.id,
                         text: answerData.text,
                         orderNumber: answerData.orderNumber,
@@ -198,14 +183,11 @@ function TakeQuizPage() {
                     }))
                 }));
 
-                console.log('Questions chargées depuis l\'API:', questionsData);
-                console.log('Questions transformées:', transformedQuestions);
-
                 setQuestions(transformedQuestions);
             } catch (error) {
                 // Gérer les erreurs de l'API
-                const customError = error as CustomAxiosError;
-                const errorMessage: string = customError.response?.data?.message || customError.message || 'Erreur inconnue';
+                const axiosError = error as AxiosError;
+                const errorMessage: string = axiosError.response?.data?.message || axiosError.message || 'Erreur inconnue';
                 alert('Erreur lors du chargement des questions: ' + errorMessage);
                 navigate('/student');
             } finally {
@@ -222,27 +204,23 @@ function TakeQuizPage() {
     }, [participantData, quizInfo, navigate]);
 
     // Fonction pour gérer la sélection d'une réponse
-    const handleAnswerSelect: AnswerSelectHandler = (questionId: number, answerId: number): void => {
-        console.log('Sélection réponse:', { questionId, answerId });
-        setUserAnswers((prev: UserAnswersState) => ({
+    const handleAnswerSelect = (questionId: number, answerId: number): void => {
+        setUserAnswers((prev: UserAnswers) => ({
             ...prev,
             [questionId]: answerId
         }));
     };
 
     // Fonction pour passer à la question suivante
-    const handleNextQuestion: NextQuestionHandler = (): void => {
+    const handleNextQuestion = (): void => {
         if (currentQuestionIndex < questions.length - 1) {
             setCurrentQuestionIndex(currentQuestionIndex + 1);
         }
     };
 
     // Fonction pour gérer la soumission du quiz
-    const handleSubmitQuiz: SubmitQuizHandler = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    const handleSubmitQuiz = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
         event.preventDefault();
-
-        console.log('Soumission du quiz avec userAnswers:', userAnswers);
-        console.log('Questions:', questions);
 
         // Vérifier que toutes les questions ont une réponse
         const answeredQuestions: number = Object.keys(userAnswers).length;
@@ -254,34 +232,50 @@ function TakeQuizPage() {
         setIsSubmitting(true);
 
         try {
-            // Créer une tentative de quiz
+            // Récupérer le token d'authentification
+            const token = AuthService.getToken();
+            if (!token) {
+                alert('Vous devez être connecté pour soumettre le quiz');
+                navigate('/login');
+                return;
+            }
+
+            // Créer une tentative de quiz avec authentification
             const attemptCreationData: AttemptCreationData = {
                 quiz: `/api/quizzes/${quizInfo!.id}`,
                 participantFirstName: participantData!.firstName,
                 participantLastName: participantData!.lastName
             };
 
-            const attemptResponse: AxiosResponse<AttemptData> = await axios.post<AttemptData>(
+            const attemptResponse = await axios.post<AttemptData>(
                 `${API_BASE_URL}/api/quiz_attempts`, 
-                attemptCreationData
+                attemptCreationData,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                }
             );
 
             const attemptData: AttemptData = attemptResponse.data;
-            console.log('Tentative créée:', attemptData);
 
-            // Soumettre les réponses
+            // Soumettre les réponses avec authentification
             const submissionData: QuizSubmissionData = {
                 attemptId: attemptData.id,
                 answers: userAnswers
             };
 
-            const submitResponse: AxiosResponse<QuizResults> = await axios.post<QuizResults>(
+            const submitResponse = await axios.post<QuizResults>(
                 `${API_BASE_URL}/api/public/quizzes/quizzes/${quizInfo!.id}/submit`, 
-                submissionData
+                submissionData,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                }
             );
 
             const results: QuizResults = submitResponse.data;
-            console.log('Résultats reçus:', results);
 
             // Navigation vers la page de résultats
             navigate('/quiz-results', {
@@ -296,8 +290,8 @@ function TakeQuizPage() {
 
         } catch (error) {
             // Gérer les erreurs de l'API
-            const customError = error as CustomAxiosError;
-            const errorMessage: string = customError.response?.data?.message || customError.message || 'Erreur inconnue';
+            const axiosError = error as AxiosError;
+            const errorMessage: string = axiosError.response?.data?.message || axiosError.message || 'Erreur inconnue';
             alert('Erreur lors de la soumission du quiz: ' + errorMessage);
         } finally {
             setIsSubmitting(false);
@@ -305,17 +299,17 @@ function TakeQuizPage() {
     };
 
     // Fonction pour retourner à la page précédente
-    const handleBack: BackHandler = (): void => {
+    const handleBack = (): void => {
         navigate('/student');
     };
 
     // Fonction pour gérer le clic sur le bouton Suivant
-    const handleNextClick: EventHandler = (): void => {
+    const handleNextClick = (): void => {
         handleNextQuestion();
     };
 
-   
-    const handleSubmitClick: EventHandler = (): void => {
+    // Fonction pour gérer le clic sur le bouton Terminer (sans event car pas dans un form)
+    const handleSubmitClick = (): void => {
         // Créer un événement factice pour maintenir la compatibilité
         const fakeEvent = {
             preventDefault: () => {}
@@ -345,7 +339,7 @@ function TakeQuizPage() {
             <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
                 <div className="text-center">
                     <div className="text-xl mb-4">Aucune question disponible pour ce quiz.</div>
-                    <Button onClick={handleBack} className="bg-blue-600 hover:bg-blue-700">
+                    <Button onClick={handleBack} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900">
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Retour
                     </Button>
@@ -431,7 +425,7 @@ function TakeQuizPage() {
                         <Button
                             onClick={handleNextClick}
                             disabled={!userAnswers[currentQuestion.id]}
-                            className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 font-semibold"
+                            className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold"
                         >
                             Suivant
                         </Button>
@@ -439,7 +433,7 @@ function TakeQuizPage() {
                         <Button
                             onClick={handleSubmitClick}
                             disabled={isSubmitting || Object.keys(userAnswers).length < questions.length}
-                            className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 font-semibold"
+                            className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold"
                         >
                             {isSubmitting ? 'Soumission...' : 'Terminer le Quiz'}
                         </Button>

@@ -25,74 +25,47 @@ interface QuizInfo {
     passingScore?: number;
 }
 
-
+// Type pour les réponses utilisateur
 type UserAnswers = Record<number, number>;
 
-// Interface pour une réponse dans les détails du backend
-interface BackendAnswer {
-    id: number;
-    text: string;
-    isCorrect: boolean;
-}
-
-// Interface pour un détail de réponse du backend
-interface ResponseDetail {
-    questionId: number;
-    questionText: string;
-    userAnswer: BackendAnswer;
-    correctAnswer: BackendAnswer;
-    isCorrect: boolean;
-}
-
-// Interface pour les résultats venant du backend
-interface BackendResults {
-    score: number;
-    totalQuestions: number;
-    percentage: number;
-    responseDetails?: ResponseDetail[];
-}
-
-// Interface pour l'état de navigation passé depuis la page précédente
+// Interface pour l'état de navigation
 interface LocationState {
     quizInfo: QuizInfo;
     userAnswers: UserAnswers;
-    results?: BackendResults;
+    results?: {
+        score: number;
+        totalQuestions: number;
+        percentage: number;
+        responseDetails?: Array<{
+            questionId: number;
+            questionText: string;
+            userAnswer: { id: number; text: string; isCorrect: boolean };
+            correctAnswer: { id: number; text: string; isCorrect: boolean };
+            isCorrect: boolean;
+        }>;
+    };
 }
 
-// Interface personnalisée pour useLocation avec notre type de state
+// Interface personnalisée pour useLocation
 interface CustomLocation extends Omit<Location, 'state'> {
     state: LocationState | null;
 }
 
-// Interface pour une réponse à une question
+// Interface pour une réponse
 interface Answer {
     id: number;
     text: string;
     isCorrect?: boolean;
-    orderNumber?: number;
 }
 
-// Interface pour une question avec ses réponses
+// Interface pour une question
 interface Question {
     id: number;
     text: string;
     answers: Answer[];
-    orderNumber?: number;
 }
 
-// Interface pour les données complètes d'un quiz récupérées de l'API
-interface QuizData {
-    id: number;
-    title: string;
-    description?: string;
-    questions: Question[];
-    uniqueCode?: string;
-    isActive: boolean;
-    isStarted: boolean;
-    passingScore?: number;
-}
-
-// Interface pour les détails d'une réponse utilisateur formatée pour l'affichage
+// Interface pour les détails d'une réponse utilisateur
 interface UserAnswerDetail {
     questionId: number;
     questionText: string;
@@ -101,7 +74,7 @@ interface UserAnswerDetail {
     isCorrect: boolean;
 }
 
-// Interface pour les résultats calculés finaux
+// Interface pour les résultats calculés
 interface CalculatedResults {
     score: number;
     totalQuestions: number;
@@ -109,19 +82,13 @@ interface CalculatedResults {
     userAnswers: UserAnswerDetail[];
 }
 
-// Type pour l'état de calcul
-type CalculatingState = boolean;
-
-// Type pour les résultats (peuvent être null pendant le calcul)
-type ResultsState = CalculatedResults | null;
-
 
 
 // URL de base de l'API Symfony
 const API_BASE_URL: string = 'http://localhost:8000';
 
 function QuizResultsPage() {
-  
+    // Hook pour la navigation entre les pages
     const navigate = useNavigate();
 
     // Hook pour récupérer les données passées en navigation
@@ -129,104 +96,56 @@ function QuizResultsPage() {
     const { quizInfo, userAnswers, results: backendResults }: Partial<LocationState> = location.state || {};
 
     // État pour stocker les résultats calculés
-    const [results, setResults] = useState<ResultsState>(null);
+    const [results, setResults] = useState<CalculatedResults | null>(null);
 
     // État pour indiquer si on calcule les résultats
-    const [isCalculating, setIsCalculating] = useState<CalculatingState>(true);
+    const [isCalculating, setIsCalculating] = useState<boolean>(true);
 
-   
+    // Calculer les résultats au montage du composant
     useEffect(() => {
         const calculateResults = async (): Promise<void> => {
             if (!quizInfo || !userAnswers) {
-                console.log('Données manquantes:', { quizInfo, userAnswers });
                 navigate('/student');
                 return;
             }
 
             try {
-                // Récupérer les questions directement depuis l'API pour avoir les bons IDs
-                const response: AxiosResponse<QuizData> = await axios.get<QuizData>(`${API_BASE_URL}/api/public/quizzes/${quizInfo.id}`);
-                const quizData: QuizData = response.data;
-                const questions: Question[] = quizData.questions || [];
+                // Récupérer les questions depuis l'API
+                const response: AxiosResponse<{ questions: Question[] }> = await axios.get(`${API_BASE_URL}/api/public/quizzes/${quizInfo.id}`);
+                const questions: Question[] = response.data.questions || [];
 
-                console.log('Questions récupérées depuis l\'API:', questions);
-                console.log('userAnswers reçus:', userAnswers);
-
-                // Log détaillé des questions et réponses
-                questions.forEach((question: Question, index: number) => {
-                    console.log(`Question ${index + 1}:`, {
-                        id: question.id,
-                        text: question.text,
-                        answers: question.answers.map((a: Answer) => ({
-                            id: a.id,
-                            text: a.text,
-                            isCorrect: a.isCorrect
-                        }))
-                    });
-                });
-
-               
+                // Si on a les résultats du backend, on les utilise
                 if (backendResults) {
-                    console.log('Utilisation des résultats du backend:', backendResults);
                     const userAnswersDetails: UserAnswerDetail[] = [];
 
                     // Si le backend a fourni les détails des réponses, on les utilise
                     if (backendResults.responseDetails) {
-                        console.log('Utilisation des détails de réponse du backend:', backendResults.responseDetails);
-
-                        backendResults.responseDetails.forEach((detail: ResponseDetail) => {
+                        backendResults.responseDetails.forEach((detail) => {
                             userAnswersDetails.push({
                                 questionId: detail.questionId,
                                 questionText: detail.questionText,
                                 userAnswer: {
                                     id: detail.userAnswer.id,
                                     text: detail.userAnswer.text,
-                                    orderNumber: 1, 
                                     isCorrect: detail.userAnswer.isCorrect
                                 },
-                                correctAnswer: detail.correctAnswer ? {
+                                correctAnswer: {
                                     id: detail.correctAnswer.id,
                                     text: detail.correctAnswer.text,
-                                    orderNumber: 1, 
                                     isCorrect: detail.correctAnswer.isCorrect
-                                } : {
-                                    id: 0,
-                                    text: 'Réponse non disponible',
-                                    orderNumber: 1,
-                                    isCorrect: false
                                 },
                                 isCorrect: detail.isCorrect
                             });
                         });
                     } else {
-                    
-                        console.log('Pas de détails de réponse du backend, calcul côté frontend');
-
-                        // Analyser chaque question pour créer les détails
+                        // Calcul côté frontend
                         questions.forEach((question: Question) => {
                             const userAnswerId: number = userAnswers[question.id];
                             const userAnswer: Answer | undefined = question.answers.find((a: Answer) => a.id === userAnswerId);
-
-                            // Si isCorrect n'est pas défini, on doit déterminer la bonne réponse autrement
-                            let correctAnswer: Answer | undefined = question.answers.find((a: Answer) => a.isCorrect);
-
-                            if (!correctAnswer && question.answers.length > 0) {
-                                correctAnswer = question.answers[0];
-                            }
-
-                            console.log('Question:', question.id, 'UserAnswerId:', userAnswerId, 'UserAnswer:', userAnswer, 'CorrectAnswer:', correctAnswer);
+                            const correctAnswer: Answer | undefined = question.answers.find((a: Answer) => a.isCorrect);
 
                             if (userAnswer && correctAnswer) {
-                                // Déterminer si la réponse est correcte
-                                let isCorrect: boolean = false;
-
-                                // Si isCorrect est défini sur la réponse utilisateur, on l'utilise
-                                if (userAnswer.isCorrect !== undefined) {
-                                    isCorrect = userAnswer.isCorrect;
-                                } else {
-                                    // Sinon, on compare avec la bonne réponse
-                                    isCorrect = userAnswer.id === correctAnswer.id;
-                                }
+                                const isCorrect: boolean = userAnswer.isCorrect || userAnswer.id === correctAnswer.id;
 
                                 userAnswersDetails.push({
                                     questionId: question.id,
@@ -235,15 +154,9 @@ function QuizResultsPage() {
                                     correctAnswer,
                                     isCorrect
                                 });
-                            } else {
-                                console.log('Problème avec la question:', question.id);
-                                console.log('- userAnswer trouvé:', !!userAnswer);
-                                console.log('- correctAnswer trouvé:', !!correctAnswer);
                             }
                         });
                     }
-
-                    console.log('userAnswersDetails créés:', userAnswersDetails);
 
                     setResults({
                         score: backendResults.score,
@@ -252,19 +165,17 @@ function QuizResultsPage() {
                         userAnswers: userAnswersDetails
                     });
                 } else {
-                    console.log('Pas de résultats backend, calcul côté frontend');
-                   
+                    // Calcul côté frontend si pas de résultats backend
                     let correctAnswers: number = 0;
                     const userAnswersDetails: UserAnswerDetail[] = [];
 
-                    // Analyser chaque question
                     questions.forEach((question: Question) => {
                         const userAnswerId: number = userAnswers[question.id];
                         const userAnswer: Answer | undefined = question.answers.find((a: Answer) => a.id === userAnswerId);
                         const correctAnswer: Answer | undefined = question.answers.find((a: Answer) => a.isCorrect);
 
                         if (userAnswer && correctAnswer) {
-                            const isCorrect: boolean = userAnswer.isCorrect || false;
+                            const isCorrect: boolean = userAnswer.isCorrect || userAnswer.id === correctAnswer.id;
                             if (isCorrect) {
                                 correctAnswers++;
                             }
@@ -292,7 +203,6 @@ function QuizResultsPage() {
 
             } catch (error) {
                 console.error('Erreur lors du calcul des résultats:', error);
-                alert('Erreur lors du calcul des résultats');
                 navigate('/student');
             } finally {
                 setIsCalculating(false);
@@ -330,11 +240,11 @@ function QuizResultsPage() {
             <div className="max-w-6xl mx-auto">
                 {/* Header */}
                 <div className="mb-8">
-                    <h1 className="text-4xl font-bold text-yellow-400 mb-2">Résultat du Quizz</h1>
+                    <h1 className="text-4xl font-bold text-yellow-400 mb-2">Résultat du Quiz</h1>
                     <p className="text-gray-300">Votre performance détaillée</p>
                 </div>
 
-                {/* Main Results Card - Full Width */}
+                {/* Main Results Card */}
                 <Card className="bg-gray-200 text-gray-900 mb-6">
                     <CardContent className="p-8 text-center">
                         <div className="flex justify-center mb-4">
@@ -348,9 +258,9 @@ function QuizResultsPage() {
                     </CardContent>
                 </Card>
 
-                {/* Bottom Section - 50/50 Split */}
+                {/* Bottom Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Answer Details - Left Side */}
+                    {/* Answer Details */}
                     <Card className="bg-gray-200 text-gray-900">
                         <CardHeader>
                             <CardTitle className="text-xl font-bold">Détail des Réponses</CardTitle>
@@ -383,7 +293,7 @@ function QuizResultsPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Actions Sidebar - Right Side */}
+                    {/* Actions */}
                     <Card className="bg-gray-200 text-gray-900 h-48">
                         <CardHeader className="pb-3">
                             <CardTitle className="text-xl font-bold text-center">Actions</CardTitle>

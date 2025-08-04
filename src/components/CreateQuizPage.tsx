@@ -1,245 +1,124 @@
-
-
 import { useState } from 'react';
-import type { FormEvent, ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import type { AxiosResponse, AxiosError } from 'axios';
+import type { AxiosError } from 'axios';
 
-
+// Import des composants UI
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-
+// Import des icônes
 import { ArrowLeft, Copy, CheckCircle } from 'lucide-react';
 
-
 import AuthService from '../services/AuthService';
+import toast from 'react-hot-toast';
 
 
-// Interface pour les données du formulaire de création de quiz
-interface QuizFormData {
+
+// Type pour le formulaire de quiz
+interface QuizForm {
     title: string;
     description: string;
 }
 
-// Interface pour les données du quiz à envoyer à l'API
-interface QuizToSend {
-    title: string;
-    description: string;
-    isActive: boolean;
-    isStarted: boolean;
-    passingScore: number;
-}
-
-// Interface pour la réponse du quiz créé
-interface CreatedQuiz {
-    id: number;
-    title: string;
-    description: string;
-    uniqueCode?: string;
-    isActive: boolean;
-    isStarted: boolean;
-    passingScore: number;
-    createdAt?: string;
-}
-
-// Interface pour les messages d'alerte
-interface Message {
-    type: 'success' | 'error' | '';
-    text: string;
-}
-
-// Type pour les types de messages
-type MessageType = 'success' | 'error';
-
-// Interface pour les erreurs de validation
-interface ValidationError {
-    field: string;
-    message: string;
-}
-
-// Type pour les champs du formulaire
-type FormField = keyof QuizFormData;
-
-// Interface pour les réponses d'erreur de l'API
-interface ApiErrorResponse {
-    message?: string;
-    errors?: ValidationError[];
-}
-
-// Type pour les erreurs Axios avec notre interface personnalisée
-interface CustomAxiosError extends AxiosError {
-    response?: AxiosResponse<ApiErrorResponse>;
-}
+// URL de l'API
+const API_BASE_URL = 'http://localhost:8000';
 
 
-
-// URL de base de l'API Symfony
-const API_BASE_URL: string = 'http://localhost:8000';
 
 function CreateQuizPage() {
-    // Hook pour la navigation entre les pages
     const navigate = useNavigate();
 
-    // État pour stocker les données du formulaire de quiz
-    const [quizData, setQuizData] = useState<QuizFormData>({
+    // États simples
+    const [quizData, setQuizData] = useState<QuizForm>({
         title: '',
         description: ''
     });
+    const [loading, setLoading] = useState(false);
+    const [message, setMessage] = useState('');
+    const [messageType, setMessageType] = useState<'success' | 'error' | ''>('');
 
-    // État pour indiquer si on crée le quiz
-    const [isLoading, setIsLoading] = useState<boolean>(false);
-
-    // État pour les messages de succès/erreur
-    const [message, setMessage] = useState<Message>({ type: '', text: '' });
-
-    // === FONCTIONS DE VALIDATION ===
-
-    // Fonction pour nettoyer et sécuriser les entrées
-    const sanitizeInput = (input: string): string => {
-        return input.trim().replace(/[<>]/g, '');
-    };
-
-    // Fonction pour valider le titre
-    const validateTitle = (title: string): string | null => {
-        const cleanTitle: string = sanitizeInput(title);
-        if (!cleanTitle) {
-            return "Le titre du quiz est obligatoire";
+    // Fonction pour obtenir le token
+    const getToken = () => {
+        const token = AuthService.getToken();
+        if (!token) {
+            toast.error('Vous devez être connecté');
+            navigate('/login');
+            return null;
         }
-        if (cleanTitle.length < 3) {
-            return "Le titre doit contenir au moins 3 caractères";
-        }
-        if (cleanTitle.length > 100) {
-            return "Le titre ne peut pas dépasser 100 caractères";
-        }
-        // Vérifier contre les tentatives d'injection
-        if (cleanTitle.includes('--') || cleanTitle.includes(';') || cleanTitle.includes('/*')) {
-            return "Caractères non autorisés détectés dans le titre";
-        }
-        return null;
-    };
-
-    // Fonction pour valider la description
-    const validateDescription = (description: string): string | null => {
-        if (description.length > 500) {
-            return "La description ne peut pas dépasser 500 caractères";
-        }
-        // Vérifier contre les tentatives d'injection
-        if (description.includes('--') || description.includes(';') || description.includes('/*')) {
-            return "Caractères non autorisés détectés dans la description";
-        }
-        return null;
+        return token;
     };
 
     // Fonction pour afficher un message
-    const showMessage = (type: MessageType, text: string): void => {
-        setMessage({ type, text });
+    const showMessage = (type: 'success' | 'error', text: string) => {
+        setMessage(text);
+        setMessageType(type);
+        
         // Effacer le message après 5 secondes
-        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-    };
-
-    // Fonction pour afficher un message de succès
-    const showSuccessMessage = (text: string): void => {
-        showMessage('success', text);
-    };
-
-    // Fonction pour afficher un message d'erreur
-    const showErrorMessage = (text: string): void => {
-        showMessage('error', text);
+        setTimeout(() => {
+            setMessage('');
+            setMessageType('');
+        }, 5000);
     };
 
     // Fonction pour copier le code d'accès
-    const copyAccessCode = async (code: string): Promise<void> => {
+    const copyAccessCode = async (code: string) => {
         try {
             await navigator.clipboard.writeText(code);
-            showSuccessMessage('Code copié dans le presse-papiers !');
+            toast.success('Code copié !');
         } catch (err) {
             console.error('Erreur copie:', err);
-            showErrorMessage('Erreur lors de la copie');
+            toast.error('Erreur lors de la copie');
         }
-    };
-
-    // === FONCTIONS PRINCIPALES ===
-
-    // Fonction pour mettre à jour les champs du formulaire
-    const handleInputChange = (field: FormField, value: string): void => {
-        setQuizData((prevData: QuizFormData) => ({
-            ...prevData,
-            [field]: value
-        }));
-    };
-
-    // Fonction pour gérer les erreurs de l'API
-    const handleApiError = (error: CustomAxiosError): void => {
-        console.error('Erreur lors de la création du quiz:', error);
-        let errorMessage: string = 'Erreur lors de la création du quiz';
-
-        if (error.response) {
-            const status: number = error.response.status;
-            if (status === 401) {
-                errorMessage = 'Vous devez être connecté pour créer un quiz';
-            } else if (status === 400) {
-                errorMessage = 'Données invalides pour la création du quiz';
-            } else if (status === 403) {
-                errorMessage = 'Vous n\'avez pas les permissions pour créer un quiz';
-            } else if (error.response.data && error.response.data.message) {
-                errorMessage = error.response.data.message;
-            }
-        } else if (error.request) {
-            errorMessage = 'Problème de connexion au serveur. Veuillez réessayer.';
-        } else {
-            errorMessage = error.message || 'Erreur inconnue';
-        }
-
-        showErrorMessage(errorMessage);
     };
 
     // Fonction pour créer le quiz
-    const handleCreateQuiz = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-        event.preventDefault();
+    const handleCreateQuiz = async (e: React.FormEvent) => {
+        e.preventDefault();
 
-        // === VALIDATIONS CÔTÉ FRONTEND ===
-        // Valider le titre
-        const titleError: string | null = validateTitle(quizData.title);
-        if (titleError) {
-            showErrorMessage(titleError);
+        // Validation 
+        if (!quizData.title.trim()) {
+            showMessage('error', 'Le titre est obligatoire');
             return;
         }
 
-        // Valider la description
-        const descriptionError: string | null = validateDescription(quizData.description);
-        if (descriptionError) {
-            showErrorMessage(descriptionError);
+        if (quizData.title.length < 3) {
+            showMessage('error', 'Le titre doit avoir au moins 3 caractères');
             return;
         }
 
-        setIsLoading(true);
+        if (quizData.title.length > 100) {
+            showMessage('error', 'Le titre ne peut pas dépasser 100 caractères');
+            return;
+        }
+
+        if (quizData.description.length > 500) {
+            showMessage('error', 'La description ne peut pas dépasser 500 caractères');
+            return;
+        }
+
+        setLoading(true);
 
         try {
-            // Préparer les données du quiz
-            const quizToSend: QuizToSend = {
-                title: sanitizeInput(quizData.title),
-                description: sanitizeInput(quizData.description) || '',
+            const token = getToken();
+            if (!token) return;
+
+            // Données à envoyer
+            const dataToSend = {
+                title: quizData.title.trim(),
+                description: quizData.description.trim(),
                 isActive: true,
                 isStarted: false,
                 passingScore: 70
             };
 
-            // Récupérer le token d'authentification
-            const token: string | null = AuthService.getToken();
-            if (!token) {
-                showErrorMessage('Vous devez être connecté pour créer un quiz');
-                return;
-            }
-
-            // Créer le quiz via l'API
-            const response = await axios.post<CreatedQuiz>(
-                `${API_BASE_URL}/api/quizzes`, 
-                quizToSend, 
+            // Créer le quiz
+            const response = await axios.post(
+                `${API_BASE_URL}/api/quizzes`,
+                dataToSend,
                 {
                     headers: {
                         'Content-Type': 'application/json',
@@ -248,46 +127,49 @@ function CreateQuizPage() {
                 }
             );
 
-            const createdQuiz: CreatedQuiz = response.data;
+            const createdQuiz = response.data;
 
-            // Afficher les messages de succès
-            showSuccessMessage('Quiz créé avec succès !');
+            // Afficher le succès
+            showMessage('success', 'Quiz créé avec succès !');
 
-            // Afficher le code d'accès
+            // Si on a un code d'accès, l'afficher
             if (createdQuiz.uniqueCode) {
-                showSuccessMessage(`Quiz créé ! Code d'accès : ${createdQuiz.uniqueCode}`);
-                // Afficher un toast personnalisé pour le code
                 setTimeout(() => {
-                    showSuccessMessage(`Code d'accès : ${createdQuiz.uniqueCode} - Cliquez pour copier`);
+                    showMessage('success', `Code d'accès : ${createdQuiz.uniqueCode}`);
                 }, 1000);
             }
 
-            // Rediriger vers le dashboard après un délai
+            // Rediriger après 2 secondes
             setTimeout(() => {
                 navigate('/admin');
             }, 2000);
 
         } catch (error) {
-            handleApiError(error as CustomAxiosError);
+            console.error('Erreur:', error);
+            
+            // Gestion simple des erreurs
+            const axiosError = error as AxiosError;
+            if (axiosError.response?.status === 401) {
+                showMessage('error', 'Vous devez être connecté');
+            } else if (axiosError.response?.status === 403) {
+                showMessage('error', 'Vous n\'avez pas les permissions');
+            } else {
+                showMessage('error', 'Erreur lors de la création du quiz');
+            }
         } finally {
-            setIsLoading(false);
+            setLoading(false);
         }
-    };
-
-    // Fonction pour retourner au dashboard
-    const handleBackToDashboard = (): void => {
-        navigate('/admin');
     };
 
     return (
         <div className="min-h-screen bg-gray-900 text-white p-6">
-            {/* Header Section */}
+            {/* Header */}
             <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-4">
                     <Button
-                        onClick={handleBackToDashboard}
+                        onClick={() => navigate('/admin')}
                         variant="outline"
-                        className="border-gray-600 text-white hover:bg-gray-800"
+                        className="border-gray-600 text-black hover:bg-gray-800 hover:text-white"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Retour à l'accueil
@@ -303,22 +185,22 @@ function CreateQuizPage() {
                 </div>
             </div>
 
-            {/* Messages de succès/erreur */}
-            {message.text && (
-                <div className={`max-w-2xl mx-auto mb-6 p-4 rounded-lg ${message.type === 'success'
+            {/* Messages */}
+            {message && (
+                <div className={`max-w-2xl mx-auto mb-6 p-4 rounded-lg ${
+                    messageType === 'success'
                         ? 'bg-green-100 border border-green-400 text-green-700'
                         : 'bg-red-100 border border-red-400 text-red-700'
-                    }`}>
+                }`}>
                     <div className="flex items-center">
-                        {message.type === 'success' ? (
-                            <CheckCircle className="w-5 h-5 mr-2" />
-                        ) : (
-                            <Copy className="w-5 h-5 mr-2" />
-                        )}
-                        <span>{message.text}</span>
-                        {message.type === 'success' && message.text.includes('Code d\'accès') && (
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        <span>{message}</span>
+                        {messageType === 'success' && message.includes('Code d\'accès') && (
                             <Button
-                                onClick={() => copyAccessCode(message.text.split('Code d\'accès : ')[1].split(' -')[0])}
+                                onClick={() => {
+                                    const code = message.split('Code d\'accès : ')[1];
+                                    if (code) copyAccessCode(code);
+                                }}
                                 className="ml-2 p-1 hover:bg-green-200 rounded"
                                 size="sm"
                             >
@@ -329,7 +211,7 @@ function CreateQuizPage() {
                 </div>
             )}
 
-            {/* Section principale */}
+            {/* Formulaire */}
             <div className="max-w-2xl mx-auto">
                 <Card className="bg-gray-100 text-gray-900">
                     <CardHeader>
@@ -337,24 +219,23 @@ function CreateQuizPage() {
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleCreateQuiz}>
-                            {/* Titre du quiz */}
+                            {/* Titre */}
                             <div className="mb-4">
                                 <Label htmlFor="title" className="text-sm font-medium">
                                     Titre du quiz <span className="text-red-500">*</span>
                                 </Label>
                                 <Input
                                     id="title"
-                                    name="title"
                                     type="text"
                                     value={quizData.title}
-                                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange('title', e.target.value)}
+                                    onChange={(e) => setQuizData({ ...quizData, title: e.target.value })}
                                     placeholder="Ex: Quiz de culture générale"
                                     required
                                     maxLength={100}
                                     className="mt-1"
                                 />
                                 <div className="text-sm text-gray-600 mt-1">
-                                    100 caractères autorisés
+                                    100 caractères maximum
                                 </div>
                             </div>
 
@@ -365,49 +246,39 @@ function CreateQuizPage() {
                                 </Label>
                                 <Textarea
                                     id="description"
-                                    name="description"
                                     value={quizData.description}
-                                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleInputChange('description', e.target.value)}
+                                    onChange={(e) => setQuizData({ ...quizData, description: e.target.value })}
                                     placeholder="Description optionnelle du quiz"
                                     rows={3}
                                     maxLength={500}
                                     className="mt-1"
                                 />
                                 <div className="text-sm text-gray-600 mt-1">
-                                    Maximum 500 caractères. Description optionnelle du quiz
+                                    500 caractères maximum (optionnel)
                                 </div>
                             </div>
 
-                            {/* Informations sur le quiz */}
-                            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                <h4 className="font-semibold text-blue-800 mb-2">Informations sur le quiz</h4>
-                                <ul className="text-sm text-blue-700 space-y-1">
-                                    <li>• Le quiz sera créé avec un code d'accès unique</li>
-                                    <li>• Le quiz sera automatiquement activé</li>
-                                    <li>• Le score de passage sera fixé à 70%</li>
-                                    <li>• Vous pourrez ajouter des questions après la création</li>
-                                </ul>
-                            </div>
+                        
 
-                            {/* Boutons d'action */}
+                            {/* Boutons */}
                             <div className="flex gap-4">
                                 <Button
                                     type="button"
-                                    onClick={handleBackToDashboard}
+                                    onClick={() => navigate('/admin')}
                                     variant="outline"
                                     className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                                    disabled={isLoading}
+                                    disabled={loading}
                                 >
                                     Annuler
                                 </Button>
                                 <Button
                                     type="submit"
-                                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-                                    disabled={isLoading}
+                                    className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold"
+                                    disabled={loading}
                                 >
-                                    {isLoading ? (
+                                    {loading ? (
                                         <>
-                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900 mr-2"></div>
                                             Création...
                                         </>
                                     ) : (

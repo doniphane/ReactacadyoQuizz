@@ -1,8 +1,10 @@
+// Composant de page Student
+
 import { useState } from 'react';
 import type { FormEvent, ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import type { AxiosResponse, AxiosError } from 'axios';
+import type { AxiosError } from 'axios';
 
 // Import des composants Shadcn UI
 import { Button } from '@/components/ui/button';
@@ -15,7 +17,6 @@ import { LogOut, AlertCircle, User, BookOpen, History } from 'lucide-react';
 
 // Import du service d'authentification
 import AuthService from '../services/AuthService';
-
 
 
 // Interface pour les données du participant
@@ -51,52 +52,14 @@ interface SanitizedParticipantData {
     quizCode: string;
 }
 
-// Type pour les champs du formulaire
-type FormField = keyof ParticipantData;
-
-// Type pour les fonctions de validation qui retournent soit null soit un message d'erreur
-type ValidationResult = string | null;
-
-// Type pour les longueurs maximales des champs
-type MaxLengths = Record<FormField, number>;
-
-// Interface pour les réponses d'erreur de l'API
-interface ApiErrorResponse {
-    message?: string;
-    error?: string;
-}
-
-// Interface pour les erreurs Axios personnalisées
-interface CustomAxiosError extends AxiosError {
-    response?: AxiosResponse<ApiErrorResponse>;
-}
-
 // Interface pour les props du composant ErrorMessage
 interface ErrorMessageProps {
     error?: string;
 }
 
-// Types pour les états du composant
-type LoadingState = boolean;
-type ErrorState = string;
-type QuizInfoState = QuizInfo | null;
-
-// Types pour les gestionnaires d'événements
-type InputChangeHandler = (field: FormField, value: string) => void;
-type FormSubmitHandler = (event: FormEvent<HTMLFormElement>) => Promise<void>;
-type EventHandler = () => Promise<void>;
-
-// Interface pour les utilitaires de validation
-interface ValidationUtilsInterface {
-    sanitizeInput: (input: string) => string;
-    validateName: (name: string) => ValidationResult;
-    validateQuizCode: (code: string) => ValidationResult;
-    escapeHtml: (text: string) => string;
-}
-
 
 // Utilitaires de validation et sécurité
-const ValidationUtils: ValidationUtilsInterface = {
+const ValidationUtils = {
     // Nettoie une chaîne de caractères dangereux
     sanitizeInput: (input: string): string => {
         return input
@@ -106,7 +69,7 @@ const ValidationUtils: ValidationUtilsInterface = {
     },
 
     // Valide un nom (prénom/nom)
-    validateName: (name: string): ValidationResult => {
+    validateName: (name: string): string | null => {
         const sanitized: string = ValidationUtils.sanitizeInput(name);
 
         if (!sanitized) {
@@ -136,7 +99,7 @@ const ValidationUtils: ValidationUtilsInterface = {
     },
 
     // Valide le code du quiz
-    validateQuizCode: (code: string): ValidationResult => {
+    validateQuizCode: (code: string): string | null => {
         const sanitized: string = code.trim().toUpperCase();
 
         if (!sanitized) {
@@ -165,7 +128,6 @@ const ValidationUtils: ValidationUtilsInterface = {
 };
 
 
-
 // URL de base de l'API Symfony
 const API_BASE_URL: string = 'http://localhost:8000';
 
@@ -184,16 +146,16 @@ function StudentPage() {
     const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
 
     // État pour stocker les informations du quiz (utilisé dans la navigation)
-    const [, setQuizInfo] = useState<QuizInfoState>(null);
+    const [, setQuizInfo] = useState<QuizInfo | null>(null);
 
     // État pour indiquer si on cherche le quiz
-    const [isLoading, setIsLoading] = useState<LoadingState>(false);
+    const [isLoading, setIsLoading] = useState<boolean>(false);
 
     // État pour l'erreur générale
-    const [generalError, setGeneralError] = useState<ErrorState>('');
+    const [generalError, setGeneralError] = useState<string>('');
 
     // Fonction pour valider un champ spécifique
-    const validateField = (field: FormField, value: string): ValidationResult => {
+    const validateField = (field: keyof ParticipantData, value: string): string | null => {
         switch (field) {
             case 'firstName':
                 return ValidationUtils.validateName(value);
@@ -206,10 +168,9 @@ function StudentPage() {
         }
     };
 
-    // Fonction pour gérer les changements dans les champs avec validation en temps réel
-    const handleInputChange: InputChangeHandler = (field: FormField, value: string): void => {
+    const handleInputChange = (field: keyof ParticipantData, value: string): void => {
         // Limiter la longueur maximale par sécurité
-        const maxLengths: MaxLengths = {
+        const maxLengths = {
             firstName: 50,
             lastName: 50,
             quizCode: 6
@@ -235,7 +196,7 @@ function StudentPage() {
         }));
 
         // Valider le champ et mettre à jour les erreurs
-        const error: ValidationResult = validateField(field, sanitizedValue);
+        const error: string | null = validateField(field, sanitizedValue);
         setValidationErrors((prev: ValidationErrors) => ({
             ...prev,
             [field]: error || undefined
@@ -254,8 +215,8 @@ function StudentPage() {
 
         // Valider chaque champ
         Object.keys(participantData).forEach((key: string) => {
-            const field = key as FormField;
-            const error: ValidationResult = validateField(field, participantData[field]);
+            const field = key as keyof ParticipantData;
+            const error: string | null = validateField(field, participantData[field]);
             if (error) {
                 errors[field] = error;
                 isValid = false;
@@ -267,7 +228,7 @@ function StudentPage() {
     };
 
     // Fonction pour gérer la déconnexion
-    const handleLogout: EventHandler = async (): Promise<void> => {
+    const handleLogout = async (): Promise<void> => {
         try {
             await AuthService.logout();
             navigate('/login');
@@ -278,7 +239,7 @@ function StudentPage() {
     };
 
     // Fonction pour gérer la soumission du formulaire
-    const handleSubmit: FormSubmitHandler = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
         event.preventDefault();
         setGeneralError('');
 
@@ -298,8 +259,19 @@ function StudentPage() {
                 quizCode: participantData.quizCode.trim().toUpperCase()
             };
 
-            // Appeler l'API pour vérifier le code du quiz
-            const response: AxiosResponse<QuizInfo> = await axios.get<QuizInfo>(`${API_BASE_URL}/api/public/quizzes/by-code/${sanitizedData.quizCode}`);
+            // Récupérer le token d'authentification
+            const token = AuthService.getToken();
+            if (!token) {
+                setGeneralError('Vous devez être connecté pour participer à un quiz');
+                return;
+            }
+
+            // Appeler l'API pour vérifier le code du quiz avec authentification
+            const response = await axios.get<QuizInfo>(`${API_BASE_URL}/api/public/quizzes/by-code/${sanitizedData.quizCode}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
             const quizData: QuizInfo = response.data;
 
             // Vérifier que le quiz est actif
@@ -321,9 +293,9 @@ function StudentPage() {
 
         } catch (error) {
             // Gérer les erreurs de l'API de manière sécurisée
-            const customError = error as CustomAxiosError;
-            if (customError.response) {
-                const status: number = customError.response.status;
+            const axiosError = error as AxiosError;
+            if (axiosError.response) {
+                const status: number = axiosError.response.status;
                 if (status === 404) {
                     setGeneralError('Code de quiz invalide ou quiz non trouvé');
                 } else if (status === 403) {
@@ -390,14 +362,14 @@ function StudentPage() {
                 <div className="flex gap-3">
                     <Button
                         onClick={handleNavigateToHistory}
-                        className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 px-6 py-3"
+                        className="bg-white hover:bg-yellow-600 text-gray-900 px-6 py-3"
                     >
                         <History className="w-4 h-4 mr-2" />
                         Mon Historique
                     </Button>
                     <Button
                         onClick={handleLogout}
-                        className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 px-6 py-3"
+                        className="bg-white hover:bg-yellow-600 text-gray-900 px-6 py-3"
                     >
                         <LogOut className="w-4 h-4 mr-2" />
                         Déconnexion
@@ -507,8 +479,8 @@ function StudentPage() {
                             {/* Bouton Commencer le Quiz */}
                             <Button
                                 type="submit"
-                                className="w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold py-3 text-lg disabled:opacity-50"
-                                disabled={isLoading || Object.keys(validationErrors).some((key: string) => validationErrors[key as FormField])}
+                                className="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold py-3 text-lg disabled:opacity-50"
+                                disabled={isLoading || Object.keys(validationErrors).some((key: string) => validationErrors[key as keyof ValidationErrors])}
                             >
                                 {isLoading ? 'Vérification...' : 'Commencer le qizz'}
                             </Button>

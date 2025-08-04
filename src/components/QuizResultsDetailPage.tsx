@@ -1,48 +1,33 @@
-
 import { useState, useEffect } from 'react';
-import type { ChangeEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import type { Location } from 'react-router-dom';
 import axios from 'axios';
-import type { AxiosResponse } from 'axios';
 
-// Import des composants Shadcn UI
+// Import des composants UI
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 
-// Import des icônes Lucide React
-import { ArrowLeft, Users, TrendingUp, Trophy, TrendingDown, Target, Search, Calendar, BarChart3, Eye, Download } from 'lucide-react';
+// Import des icônes
+import { 
+    ArrowLeft, 
+    Users, 
+    TrendingUp, 
+    Trophy, 
+    TrendingDown, 
+    Target, 
+    Search, 
+    Calendar, 
+    BarChart3, 
+    Eye, 
+    Download 
+} from 'lucide-react';
+
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
+import AuthService from '../services/AuthService';
 
 
-// Interface pour l'état de navigation passé depuis la page précédente
-interface LocationState {
-    quizId: number;
-    quizTitle: string;
-    quizCode: string;
-}
-
-// Interface personnalisée pour useLocation avec notre type de state
-interface CustomLocation extends Omit<Location, 'state'> {
-    state: LocationState | null;
-}
-
-// Interface pour une tentative de quiz (données brutes de l'API)
-interface QuizAttempt {
-    id: number;
-    quiz: string; // URL de référence vers le quiz
-    participantFirstName: string;
-    participantLastName: string;
-    startedAt: string;
-    score: number;
-    totalQuestions: number;
-    user?: string;
-    completedAt?: string;
-}
-
-// Interface pour les données d'un étudiant avec ses résultats calculés
+// Type pour un étudiant
 interface Student {
     id: number;
     name: string;
@@ -53,10 +38,16 @@ interface Student {
     percentage: number;
 }
 
-// Interface pour les données complètes du quiz avec métriques
-interface QuizData {
-    title: string;
-    code: string;
+// Type pour les détails d'une réponse
+interface AnswerDetail {
+    questionText: string;
+    userAnswer: string;
+    correctAnswer: string;
+    isCorrect: boolean;
+}
+
+// Type pour les métriques
+interface Metrics {
     totalStudents: number;
     averageScore: number;
     bestScore: number;
@@ -64,87 +55,79 @@ interface QuizData {
     successRate: number;
 }
 
-// Interface pour une question (données brutes de l'API)
+// Type pour une tentative de quiz
+interface QuizAttempt {
+    id: number;
+    quiz: string;
+    participantFirstName: string;
+    participantLastName: string;
+    startedAt: string;
+    score: number;
+    totalQuestions: number;
+}
+
+// Type pour une question
 interface Question {
     id: number;
     text: string;
-    quiz: string; 
-    orderNumber?: number;
+    quiz: string;
 }
 
-// Interface pour une réponse possible (données brutes de l'API)
+// Type pour une réponse
 interface Answer {
     id: number;
     text: string;
     correct: boolean;
-    question: string; 
-    orderNumber?: number;
+    question: string;
 }
 
-// Interface pour une réponse utilisateur (données brutes de l'API)
+// Type pour une réponse utilisateur
 interface UserAnswer {
-    id: number;
-    question: string; 
-    answer: string; 
-    quizAttempt: string; 
+    question: string;
+    answer: string;
+    quizAttempt: string;
 }
 
-// Interface pour les détails d'une réponse formatée pour l'affichage
-interface StudentAnswerDetail {
-    questionId: string;
-    questionText: string;
-    userAnswer: string;
-    correctAnswer: string;
-    isCorrect: boolean;
-}
-
-// Interface pour les réponses API au format JSON-LD
-interface ApiResponse<T> {
-    member?: T[];
-    'hydra:member'?: T[];
-}
-
-type ApiResponseFormat<T> = T[] | ApiResponse<T>;
-
-// Type pour les états de chargement
-type LoadingState = boolean;
-
-// Type pour les états d'erreur
-type ErrorState = string | null;
-
-// Type pour l'étudiant sélectionné
-type SelectedStudent = Student | null;
-
-// Type pour le terme de recherche
-type SearchTerm = string;
-
-// Type pour les fonctions de gestion d'événements
-type EventHandler<T = void> = () => T;
-type ParameterizedEventHandler<P, T = void> = (param: P) => T;
+// URL de l'API
+const API_BASE_URL = 'http://localhost:8000';
 
 
-
-// URL de base de l'API Symfony
-const API_BASE_URL: string = 'http://localhost:8000';
 
 function QuizResultsDetailPage() {
-    // Hook pour la navigation entre les pages
     const navigate = useNavigate();
+    const location = useLocation();
+    
+    // Récupérer les données passées depuis la page précédente
+    const { quizId, quizTitle, quizCode } = location.state || {};
 
-    // Hook pour récupérer les données passées en navigation
-    const location = useLocation() as CustomLocation;
-    const { quizId, quizTitle, quizCode }: Partial<LocationState> = location.state || {};
-
-    // État pour les données du quiz
-    const [quizData, setQuizData] = useState<QuizData | null>(null);
+    // États simples
     const [students, setStudents] = useState<Student[]>([]);
-    const [selectedStudent, setSelectedStudent] = useState<SelectedStudent>(null);
-    const [studentAnswers, setStudentAnswers] = useState<StudentAnswerDetail[]>([]);
-    const [searchTerm, setSearchTerm] = useState<SearchTerm>('');
-    const [isLoading, setIsLoading] = useState<LoadingState>(true);
-    const [error, setError] = useState<ErrorState>(null);
+    const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+    const [studentAnswers, setStudentAnswers] = useState<AnswerDetail[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [loading, setLoading] = useState(true);
 
-  
+    // Métriques calculées
+    const [metrics, setMetrics] = useState<Metrics>({
+        totalStudents: 0,
+        averageScore: 0,
+        bestScore: 0,
+        lowestScore: 0,
+        successRate: 0
+    });
+
+    // Fonction pour obtenir le token
+    const getToken = (): string | null => {
+        const token = AuthService.getToken();
+        if (!token) {
+            toast.error('Vous devez être connecté');
+            navigate('/login');
+            return null;
+        }
+        return token;
+    };
+
+    // Charger les résultats du quiz
     useEffect(() => {
         const loadQuizResults = async (): Promise<void> => {
             if (!quizId) {
@@ -153,39 +136,38 @@ function QuizResultsDetailPage() {
             }
 
             try {
-                setIsLoading(true);
-                setError(null);
+                setLoading(true);
+                const token = getToken();
+                if (!token) return;
 
-                // Récupérer les tentatives pour ce quiz
-                const response: AxiosResponse<ApiResponseFormat<QuizAttempt>> = await axios.get<ApiResponseFormat<QuizAttempt>>(`${API_BASE_URL}/api/quiz_attempts`);
-                let attemptsArray: QuizAttempt[] = [];
+                // Récupérer toutes les tentatives
+                const response = await axios.get(`${API_BASE_URL}/api/quiz_attempts`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
 
-                // Gérer le format de réponse JSON-LD
+                // Extraire les tentatives depuis la réponse
+                let allAttempts: QuizAttempt[] = [];
                 if (Array.isArray(response.data)) {
-                    attemptsArray = response.data;
-                } else if (response.data && Array.isArray((response.data as ApiResponse<QuizAttempt>).member)) {
-                    attemptsArray = (response.data as ApiResponse<QuizAttempt>).member!;
-                } else if (response.data && Array.isArray((response.data as ApiResponse<QuizAttempt>)['hydra:member'])) {
-                    attemptsArray = (response.data as ApiResponse<QuizAttempt>)['hydra:member']!;
+                    allAttempts = response.data;
+                } else if (response.data.member) {
+                    allAttempts = response.data.member;
+                } else if (response.data['hydra:member']) {
+                    allAttempts = response.data['hydra:member'];
                 }
 
-                // Filtrer les tentatives pour ce quiz spécifique
-                const quizAttempts: QuizAttempt[] = attemptsArray.filter((attempt: QuizAttempt) => {
-                    const attemptQuizId: string = attempt.quiz.split('/').pop()!;
+                // Filtrer pour ce quiz spécifique
+                const quizAttempts: QuizAttempt[] = allAttempts.filter((attempt: QuizAttempt) => {
+                    const attemptQuizId = attempt.quiz.split('/').pop();
                     return attemptQuizId === quizId.toString();
                 });
 
-                // Transformer les données des étudiants avec calculs précis
-                const studentsData: Student[] = quizAttempts.map((attempt: QuizAttempt): Student => {
-                    const percentage: number = attempt.totalQuestions > 0
+                // Transformer en données d'étudiants
+                const studentsData: Student[] = quizAttempts.map((attempt: QuizAttempt) => {
+                    const percentage = attempt.totalQuestions > 0
                         ? Math.round((attempt.score / attempt.totalQuestions) * 100)
                         : 0;
-
-                    console.log(`Étudiant ${attempt.participantFirstName} ${attempt.participantLastName}:`, {
-                        score: attempt.score,
-                        totalQuestions: attempt.totalQuestions,
-                        percentage: percentage
-                    });
 
                     return {
                         id: attempt.id,
@@ -198,336 +180,105 @@ function QuizResultsDetailPage() {
                     };
                 });
 
-                // Calculer les métriques avec les vraies données
-                const totalStudents: number = studentsData.length;
-
-                // Calculer la moyenne des scores
-                const averageScore: number = totalStudents > 0
-                    ? Math.round(studentsData.reduce((sum: number, student: Student) => sum + student.percentage, 0) / totalStudents)
-                    : 0;
-
-                // Trouver le meilleur score
-                const bestScore: number = totalStudents > 0
-                    ? Math.max(...studentsData.map((student: Student) => student.percentage))
-                    : 0;
-
-                // Trouver le score le plus bas
-                const lowestScore: number = totalStudents > 0
-                    ? Math.min(...studentsData.map((student: Student) => student.percentage))
-                    : 0;
-
-                // Calculer le taux de réussite (score >= 70%)
-                const successRate: number = totalStudents > 0
-                    ? Math.round((studentsData.filter((student: Student) => student.percentage >= 70).length / totalStudents) * 100)
-                    : 0;
-
-                console.log('Métriques calculées:', {
-                    totalStudents,
-                    averageScore,
-                    bestScore,
-                    lowestScore,
-                    successRate,
-                    studentsData: studentsData.map((s: Student) => ({ name: s.name, percentage: s.percentage }))
-                });
-
-                setQuizData({
-                    title: quizTitle || 'Quiz de Mathématiques',
-                    code: quizCode || 'MATH01',
-                    totalStudents,
-                    averageScore,
-                    bestScore,
-                    lowestScore,
-                    successRate
-                });
-
                 setStudents(studentsData);
 
+                // Calculer les métriques
+                if (studentsData.length > 0) {
+                    const percentages: number[] = studentsData.map((student: Student) => student.percentage);
+                    const average: number = Math.round(percentages.reduce((a: number, b: number) => a + b, 0) / studentsData.length);
+                    const best: number = Math.max(...percentages);
+                    const lowest: number = Math.min(...percentages);
+                    const success: number = Math.round((studentsData.filter((student: Student) => student.percentage >= 70).length / studentsData.length) * 100);
+
+                    setMetrics({
+                        totalStudents: studentsData.length,
+                        averageScore: average,
+                        bestScore: best,
+                        lowestScore: lowest,
+                        successRate: success
+                    });
+                }
+
             } catch (error) {
-                console.error('Erreur lors du chargement des résultats:', error);
-                setError('Erreur lors du chargement des résultats');
+                console.error('Erreur:', error);
+                toast.error('Erreur lors du chargement des résultats');
             } finally {
-                setIsLoading(false);
+                setLoading(false);
             }
         };
 
         loadQuizResults();
-    }, [quizId, navigate, quizTitle, quizCode]);
+    }, [quizId, navigate]);
 
-    // Fonction pour retourner à l'accueil
-    const handleBackToHome: EventHandler = (): void => {
-        navigate('/admin');
-    };
-
-    // Fonction pour exporter les résultats individuels d'un étudiant en PDF
-    const handleExportStudentResults: ParameterizedEventHandler<Student> = (student: Student): void => {
-        if (!quizData || !student || !studentAnswers.length) {
-            toast.error('Aucune donnée à exporter pour cet étudiant');
-            return;
-        }
-
-        try {
-            // Créer un nouveau document PDF
-            const doc: jsPDF = new jsPDF();
-
-            // Titre du document
-            doc.setFontSize(20);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Rapport Individuel du Quiz', 105, 20, { align: 'center' });
-
-            // Informations de l'étudiant
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'normal');
-            doc.text(`Étudiant: ${student.name}`, 20, 35);
-            doc.text(`Quiz: ${quizData.title}`, 20, 45);
-            doc.text(`Code: ${quizData.code}`, 20, 55);
-            doc.text(`Date de passage: ${student.date}`, 20, 65);
-            doc.text(`Score: ${student.score}/${student.totalQuestions} (${student.percentage}%)`, 20, 75);
-
-            // Résultats détaillés
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Détail des Réponses:', 20, 95);
-
-            // Tableau des réponses
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Question', 20, 110);
-            doc.text('Votre réponse', 80, 110);
-            doc.text('Bonne réponse', 140, 110);
-            doc.text('Statut', 180, 110);
-
-            // Données des réponses
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'normal');
-            let yPosition: number = 120;
-
-            studentAnswers.forEach((answer: StudentAnswerDetail) => {
-                // Vérifier si on doit passer à une nouvelle page
-                if (yPosition > 250) {
-                    doc.addPage();
-                    yPosition = 20;
-
-                    // Réafficher les en-têtes sur la nouvelle page
-                    doc.setFontSize(10);
-                    doc.setFont('helvetica', 'bold');
-                    doc.text('Question', 20, yPosition);
-                    doc.text('Votre réponse', 80, yPosition);
-                    doc.text('Bonne réponse', 140, yPosition);
-                    doc.text('Statut', 180, yPosition);
-                    yPosition += 10;
-                }
-
-                // Tronquer les textes si trop longs
-                const questionText: string = answer.questionText.length > 30 ?
-                    answer.questionText.substring(0, 30) + '...' : answer.questionText;
-                const userAnswerText: string = answer.userAnswer.length > 20 ?
-                    answer.userAnswer.substring(0, 20) + '...' : answer.userAnswer;
-                const correctAnswerText: string = answer.correctAnswer.length > 20 ?
-                    answer.correctAnswer.substring(0, 20) + '...' : answer.correctAnswer;
-
-                doc.text(questionText, 20, yPosition);
-                doc.text(userAnswerText, 80, yPosition);
-                doc.text(correctAnswerText, 140, yPosition);
-                doc.text(answer.isCorrect ? '✓' : '✗', 180, yPosition);
-
-                yPosition += 8;
-            });
-
-            // Pied de page
-            const pageCount: number = (doc as unknown as { internal: { getNumberOfPages(): number } }).internal.getNumberOfPages();
-            for (let i: number = 1; i <= pageCount; i++) {
-                doc.setPage(i);
-                doc.setFontSize(8);
-                doc.setFont('helvetica', 'italic');
-                doc.text(`Page ${i} sur ${pageCount}`, 105, 280, { align: 'center' });
-            }
-
-            // Sauvegarder le PDF
-            const fileName: string = `resultat_${student.name.replace(/\s+/g, '_')}_${quizData.code}_${new Date().toISOString().split('T')[0]}.pdf`;
-            doc.save(fileName);
-
-            toast.success(`Export PDF réussi pour ${student.name} !`);
-
-        } catch (error) {
-            console.error('Erreur lors de l\'export PDF:', error);
-            toast.error('Erreur lors de l\'export PDF');
-        }
-    };
-
-    // Fonction pour exporter les résultats en PDF
-    const handleExportResults: EventHandler = (): void => {
-        if (!quizData || students.length === 0) {
-            toast.error('Aucune donnée à exporter');
-            return;
-        }
-
-        try {
-            // Créer un nouveau document PDF
-            const doc: jsPDF = new jsPDF();
-
-            // Titre du document
-            doc.setFontSize(20);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Rapport des Résultats du Quiz', 105, 20, { align: 'center' });
-
-            // Informations du quiz
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'normal');
-            // doc.text(`Quiz: ${quizData.title}`, 20, 35);
-            // doc.text(`Code: ${quizData.code}`, 20, 45);
-            doc.text(`Date d'export: ${new Date().toLocaleDateString('fr-FR')}`, 20, 55);
-
-            // Tableau des résultats
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Résultats Détaillés des Participants:', 20, 75);
-
-            // En-têtes du tableau
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Nom', 20, 90);
-            doc.text('Prénom', 60, 90);
-            doc.text('Date de passage', 100, 90);
-            doc.text('Score', 150, 90);
-            doc.text('Pourcentage', 180, 90);
-
-            // Données des participants
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'normal');
-            let yPosition: number = 100;
-
-            students.forEach((student: Student) => {
-                // Vérifier si on doit passer à une nouvelle page
-                if (yPosition > 250) {
-                    doc.addPage();
-                    yPosition = 20;
-
-                    // Réafficher les en-têtes sur la nouvelle page
-                    doc.setFontSize(10);
-                    doc.setFont('helvetica', 'bold');
-                    doc.text('Nom', 20, yPosition);
-                    doc.text('Prénom', 60, yPosition);
-                    doc.text('Date de passage', 100, yPosition);
-                    doc.text('Score', 150, yPosition);
-                    doc.text('Pourcentage', 180, yPosition);
-                    yPosition += 10;
-                }
-
-                const [firstName, lastName]: string[] = student.name.split(' ');
-                doc.text(lastName || student.name, 20, yPosition);
-                doc.text(firstName || '', 60, yPosition);
-                doc.text(student.date, 100, yPosition);
-                doc.text(`${student.score}/${student.totalQuestions}`, 150, yPosition);
-                doc.text(`${student.percentage}%`, 180, yPosition);
-
-                yPosition += 8;
-            });
-
-            // Pied de page
-            const pageCount: number = doc.internal.getNumberOfPages();
-            for (let i: number = 1; i <= pageCount; i++) {
-                doc.setPage(i);
-                doc.setFontSize(8);
-                doc.setFont('helvetica', 'italic');
-                doc.text(`Page ${i} sur ${pageCount}`, 105, 280, { align: 'center' });
-            }
-
-            // Sauvegarder le PDF
-            const fileName: string = `resultats_${quizData.code}_${new Date().toISOString().split('T')[0]}.pdf`;
-            doc.save(fileName);
-
-            toast.success('Export PDF réussi !');
-
-        } catch (error) {
-            console.error('Erreur lors de l\'export PDF:', error);
-            toast.error('Erreur lors de l\'export PDF');
-        }
-    };
-
-    // Fonction pour sélectionner un étudiant
-    const handleStudentSelect: ParameterizedEventHandler<Student, Promise<void>> = async (student: Student): Promise<void> => {
+    // Sélectionner un étudiant
+    const handleStudentSelect = async (student: Student): Promise<void> => {
         setSelectedStudent(student);
 
         try {
-            // Récupérer les questions du quiz
-            const questionsResponse: AxiosResponse<ApiResponseFormat<Question>> = await axios.get<ApiResponseFormat<Question>>(`${API_BASE_URL}/api/questions`);
-            let questionsArray: Question[] = [];
+            const token = getToken();
+            if (!token) return;
 
-            // Gérer le format de réponse JSON-LD
+            // Récupérer les questions du quiz
+            const questionsResponse = await axios.get(`${API_BASE_URL}/api/questions`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            let questions: Question[] = [];
             if (Array.isArray(questionsResponse.data)) {
-                questionsArray = questionsResponse.data;
-            } else if (questionsResponse.data && Array.isArray((questionsResponse.data as ApiResponse<Question>).member)) {
-                questionsArray = (questionsResponse.data as ApiResponse<Question>).member!;
-            } else if (questionsResponse.data && Array.isArray((questionsResponse.data as ApiResponse<Question>)['hydra:member'])) {
-                questionsArray = (questionsResponse.data as ApiResponse<Question>)['hydra:member']!;
+                questions = questionsResponse.data;
+            } else if (questionsResponse.data.member) {
+                questions = questionsResponse.data.member;
+            } else if (questionsResponse.data['hydra:member']) {
+                questions = questionsResponse.data['hydra:member'];
             }
 
-            // Filtrer les questions pour ce quiz
-            const quizQuestions: Question[] = questionsArray.filter((question: Question) =>
-                question.quiz === `/api/quizzes/${quizId}`
-            );
+            // Filtrer pour ce quiz
+            const quizQuestions: Question[] = questions.filter((question: Question) => question.quiz === `/api/quizzes/${quizId}`);
 
             // Récupérer toutes les réponses possibles
-            const answersResponse: AxiosResponse<ApiResponseFormat<Answer>> = await axios.get<ApiResponseFormat<Answer>>(`${API_BASE_URL}/api/answers`);
-            let answersArray: Answer[] = [];
+            const answersResponse = await axios.get(`${API_BASE_URL}/api/answers`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
 
-            // Gérer le format de réponse JSON-LD
+            let answers: Answer[] = [];
             if (Array.isArray(answersResponse.data)) {
-                answersArray = answersResponse.data;
-            } else if (answersResponse.data && Array.isArray((answersResponse.data as ApiResponse<Answer>).member)) {
-                answersArray = (answersResponse.data as ApiResponse<Answer>).member!;
-            } else if (answersResponse.data && Array.isArray((answersResponse.data as ApiResponse<Answer>)['hydra:member'])) {
-                answersArray = (answersResponse.data as ApiResponse<Answer>)['hydra:member']!;
+                answers = answersResponse.data;
+            } else if (answersResponse.data.member) {
+                answers = answersResponse.data.member;
+            } else if (answersResponse.data['hydra:member']) {
+                answers = answersResponse.data['hydra:member'];
             }
 
-            // Récupérer les réponses utilisateur
-            const userAnswersResponse: AxiosResponse<ApiResponseFormat<UserAnswer>> = await axios.get<ApiResponseFormat<UserAnswer>>(`${API_BASE_URL}/api/user_answers`);
-            let userAnswersArray: UserAnswer[] = [];
+            // Récupérer les réponses de l'étudiant
+            const userAnswersResponse = await axios.get(`${API_BASE_URL}/api/user_answers`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
 
-            // Gérer le format de réponse JSON-LD
+            let userAnswers: UserAnswer[] = [];
             if (Array.isArray(userAnswersResponse.data)) {
-                userAnswersArray = userAnswersResponse.data;
-            } else if (userAnswersResponse.data && Array.isArray((userAnswersResponse.data as ApiResponse<UserAnswer>).member)) {
-                userAnswersArray = (userAnswersResponse.data as ApiResponse<UserAnswer>).member!;
-            } else if (userAnswersResponse.data && Array.isArray((userAnswersResponse.data as ApiResponse<UserAnswer>)['hydra:member'])) {
-                userAnswersArray = (userAnswersResponse.data as ApiResponse<UserAnswer>)['hydra:member']!;
+                userAnswers = userAnswersResponse.data;
+            } else if (userAnswersResponse.data.member) {
+                userAnswers = userAnswersResponse.data.member;
+            } else if (userAnswersResponse.data['hydra:member']) {
+                userAnswers = userAnswersResponse.data['hydra:member'];
             }
 
-            // Filtrer les réponses pour cette tentative
-            const studentAnswers: UserAnswer[] = userAnswersArray.filter((answer: UserAnswer) =>
-                answer.quizAttempt === `/api/quiz_attempts/${student.id}`
+            // Filtrer pour cet étudiant
+            const studentUserAnswers: UserAnswer[] = userAnswers.filter(
+                (userAnswer: UserAnswer) => userAnswer.quizAttempt === `/api/quiz_attempts/${student.id}`
             );
 
             // Créer les détails des réponses
-            const answersDetails: StudentAnswerDetail[] = studentAnswers.map((userAnswer: UserAnswer): StudentAnswerDetail => {
-                console.log('UserAnswer:', userAnswer);
+            const answersDetails: AnswerDetail[] = studentUserAnswers.map((userAnswer: UserAnswer) => {
+                const questionId = userAnswer.question.split('/').pop();
+                const answerId = userAnswer.answer.split('/').pop();
 
-                // Extraire l'ID de la question depuis l'URL
-                const questionId: string = userAnswer.question.split('/').pop()!;
-                console.log('Question ID:', questionId);
-
-                // Trouver la question correspondante
-                const question: Question | undefined = quizQuestions.find((q: Question) => q.id === parseInt(questionId));
-                console.log('Question trouvée:', question);
-
-                // Trouver toutes les réponses pour cette question
-                const allQuestionAnswers: Answer[] = answersArray.filter((a: Answer) => a.question === `/api/questions/${questionId}`);
-                console.log('Réponses pour cette question:', allQuestionAnswers);
-
-                // Extraire l'ID de la réponse depuis l'URL
-                const answerId: string = userAnswer.answer.split('/').pop()!;
-                console.log('Answer ID:', answerId);
-
-                // Trouver la réponse sélectionnée par l'utilisateur
-                const selectedAnswer: Answer | undefined = allQuestionAnswers.find((a: Answer) => a.id === parseInt(answerId));
-                console.log('Réponse sélectionnée:', selectedAnswer);
-
-                // Trouver la réponse correcte
-                const correctAnswer: Answer | undefined = allQuestionAnswers.find((a: Answer) => a.correct === true);
-                console.log('Réponse correcte:', correctAnswer);
+                const question = quizQuestions.find((q: Question) => q.id === parseInt(questionId || '0'));
+                const questionAnswers = answers.filter((answer: Answer) => answer.question === `/api/questions/${questionId}`);
+                const selectedAnswer = questionAnswers.find((answer: Answer) => answer.id === parseInt(answerId || '0'));
+                const correctAnswer = questionAnswers.find((answer: Answer) => answer.correct === true);
 
                 return {
-                    questionId: questionId,
                     questionText: question?.text || 'Question non trouvée',
                     userAnswer: selectedAnswer?.text || 'Réponse non trouvée',
                     correctAnswer: correctAnswer?.text || 'Réponse correcte non trouvée',
@@ -538,24 +289,137 @@ function QuizResultsDetailPage() {
             setStudentAnswers(answersDetails);
 
         } catch (error) {
-            console.error('Erreur lors de la récupération des réponses:', error);
+            console.error('Erreur:', error);
+            toast.error('Erreur lors du chargement des détails');
             setStudentAnswers([]);
         }
     };
 
-    // Fonction pour gérer le changement du terme de recherche
-    const handleSearchChange = (e: ChangeEvent<HTMLInputElement>): void => {
-        setSearchTerm(e.target.value);
+    // Export PDF pour tous les résultats
+    const handleExportAllResults = (): void => {
+        if (students.length === 0) {
+            toast.error('Aucune donnée à exporter');
+            return;
+        }
+
+        try {
+            const doc = new jsPDF();
+
+            // Titre
+            doc.setFontSize(20);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Rapport des Résultats du Quiz', 105, 20, { align: 'center' });
+
+            // Infos du quiz
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Quiz: ${quizTitle || 'Quiz de Mathématiques'}`, 20, 35);
+            doc.text(`Code: ${quizCode || 'MATH01'}`, 20, 45);
+            doc.text(`Date: ${new Date().toLocaleDateString('fr-FR')}`, 20, 55);
+
+            // Tableau
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Nom', 20, 80);
+            doc.text('Date', 80, 80);
+            doc.text('Score', 130, 80);
+            doc.text('Pourcentage', 170, 80);
+
+            // Données
+            doc.setFont('helvetica', 'normal');
+            let y = 90;
+
+            students.forEach((student: Student) => {
+                if (y > 270) {
+                    doc.addPage();
+                    y = 20;
+                }
+
+                doc.text(student.name, 20, y);
+                doc.text(student.date, 80, y);
+                doc.text(`${student.score}/${student.totalQuestions}`, 130, y);
+                doc.text(`${student.percentage}%`, 170, y);
+                y += 10;
+            });
+
+            // Sauvegarder
+            doc.save(`resultats_${quizCode || 'quiz'}_${new Date().toISOString().split('T')[0]}.pdf`);
+            toast.success('Export PDF réussi !');
+
+        } catch (error) {
+            console.error('Erreur PDF:', error);
+            toast.error('Erreur lors de l\'export PDF');
+        }
     };
 
-    // Filtrer les étudiants selon la recherche
-    const filteredStudents: Student[] = students.filter((student: Student) =>
+    // Export PDF pour un étudiant
+    const handleExportStudentResult = (): void => {
+        if (!selectedStudent || !studentAnswers.length) {
+            toast.error('Sélectionnez un étudiant d\'abord');
+            return;
+        }
+
+        try {
+            const doc = new jsPDF();
+
+            // Titre
+            doc.setFontSize(20);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Rapport Individuel', 105, 20, { align: 'center' });
+
+            // Infos
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Étudiant: ${selectedStudent.name}`, 20, 40);
+            doc.text(`Quiz: ${quizTitle || 'Quiz'}`, 20, 50);
+            doc.text(`Date: ${selectedStudent.date}`, 20, 60);
+            doc.text(`Score: ${selectedStudent.score}/${selectedStudent.totalQuestions} (${selectedStudent.percentage}%)`, 20, 70);
+
+            // Réponses
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Détail des Réponses:', 20, 90);
+
+            let y = 105;
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+
+            studentAnswers.forEach((answer: AnswerDetail, index: number) => {
+                if (y > 270) {
+                    doc.addPage();
+                    y = 20;
+                }
+
+                doc.text(`Q${index + 1}: ${answer.questionText.substring(0, 50)}...`, 20, y);
+                y += 8;
+                doc.text(`Votre réponse: ${answer.userAnswer}`, 30, y);
+                y += 8;
+                if (!answer.isCorrect) {
+                    doc.text(`Bonne réponse: ${answer.correctAnswer}`, 30, y);
+                    y += 8;
+                }
+                doc.text(answer.isCorrect ? '✓ Correct' : '✗ Incorrect', 30, y);
+                y += 12;
+            });
+
+            // Sauvegarder
+            doc.save(`resultat_${selectedStudent.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+            toast.success('Export PDF réussi !');
+
+        } catch (error) {
+            console.error('Erreur PDF:', error);
+            toast.error('Erreur lors de l\'export PDF');
+        }
+    };
+
+    // Filtrer les étudiants
+    const filteredStudents = students.filter(student =>
         student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         student.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // Affichage de chargement
-    if (isLoading) {
+    // Affichage du chargement
+    if (loading) {
         return (
             <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
                 <div className="text-center">
@@ -566,29 +430,14 @@ function QuizResultsDetailPage() {
         );
     }
 
-    // Affichage d'erreur
-    if (error) {
-        return (
-            <div className="min-h-screen bg-gray-900 text-white p-6">
-                <div className="max-w-6xl mx-auto text-center">
-                    <h1 className="text-2xl font-bold mb-4">Erreur</h1>
-                    <p className="text-gray-300 mb-4">{error}</p>
-                    <Button onClick={handleBackToHome} className="bg-yellow-400 hover:bg-yellow-500 text-gray-900">
-                        Retour à l'accueil
-                    </Button>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="min-h-screen bg-gray-900 text-white p-6">
             <div className="max-w-7xl mx-auto">
-                {/* Header Section */}
+                {/* Header */}
                 <div className="flex justify-between items-center mb-8">
                     <Button
-                        onClick={handleBackToHome}
-                        className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-300"
+                        onClick={() => navigate('/admin')}
+                        className="bg-yellow-500 hover:bg-yellow-600 text-gray-900"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Retour à l'accueil
@@ -596,29 +445,29 @@ function QuizResultsDetailPage() {
 
                     <div className="text-center">
                         <h1 className="text-4xl font-bold text-yellow-400 mb-2">
-                            {quizData!.title}
+                            {quizTitle || 'Quiz de Mathématiques'}
                         </h1>
                         <p className="text-gray-300">
-                            Code: {quizData!.code} • {quizData!.totalStudents} participants
+                            Code: {quizCode || 'MATH01'} • {metrics.totalStudents} participants
                         </p>
                     </div>
 
                     <Button
-                        onClick={handleExportResults}
-                        className="bg-yellow-400 hover:bg-yellow-500 text-gray-900"
+                        onClick={handleExportAllResults}
+                        className="bg-yellow-500 hover:bg-yellow-600 text-gray-900"
                     >
                         <Download className="w-4 h-4 mr-2" />
                         Exporter les Résultats
                     </Button>
                 </div>
 
-                {/* Métriques Summary */}
+                {/* Métriques */}
                 <div className="grid grid-cols-5 gap-4 mb-8">
                     <Card className="bg-yellow-400 text-gray-900">
                         <CardContent className="p-4 text-center">
                             <Users className="w-8 h-8 mx-auto mb-2" />
                             <p className="text-sm font-medium">Participants</p>
-                            <p className="text-2xl font-bold">{quizData!.totalStudents}</p>
+                            <p className="text-2xl font-bold">{metrics.totalStudents}</p>
                         </CardContent>
                     </Card>
 
@@ -626,7 +475,7 @@ function QuizResultsDetailPage() {
                         <CardContent className="p-4 text-center">
                             <TrendingUp className="w-8 h-8 mx-auto mb-2" />
                             <p className="text-sm font-medium">Moyenne</p>
-                            <p className="text-2xl font-bold">{quizData!.averageScore} %</p>
+                            <p className="text-2xl font-bold">{metrics.averageScore}%</p>
                         </CardContent>
                     </Card>
 
@@ -634,7 +483,7 @@ function QuizResultsDetailPage() {
                         <CardContent className="p-4 text-center">
                             <Trophy className="w-8 h-8 mx-auto mb-2" />
                             <p className="text-sm font-medium">Meilleur</p>
-                            <p className="text-2xl font-bold">{quizData!.bestScore} %</p>
+                            <p className="text-2xl font-bold">{metrics.bestScore}%</p>
                         </CardContent>
                     </Card>
 
@@ -642,47 +491,47 @@ function QuizResultsDetailPage() {
                         <CardContent className="p-4 text-center">
                             <TrendingDown className="w-8 h-8 mx-auto mb-2" />
                             <p className="text-sm font-medium">Plus Bas</p>
-                            <p className="text-2xl font-bold">{quizData!.lowestScore} %</p>
+                            <p className="text-2xl font-bold">{metrics.lowestScore}%</p>
                         </CardContent>
                     </Card>
 
                     <Card className="bg-yellow-400 text-gray-900">
                         <CardContent className="p-4 text-center">
                             <Target className="w-8 h-8 mx-auto mb-2" />
-                            <p className="text-sm font-medium">Taux Réussite Globale</p>
-                            <p className="text-2xl font-bold">{quizData!.successRate} %</p>
+                            <p className="text-sm font-medium">Taux Réussite</p>
+                            <p className="text-2xl font-bold">{metrics.successRate}%</p>
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* Barre de recherche et filtres */}
+                {/* Recherche */}
                 <div className="flex justify-between items-center mb-6">
                     <div className="relative flex-1 max-w-md">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                         <Input
                             type="text"
-                            placeholder="Rechercher un étudiant ..."
+                            placeholder="Rechercher un étudiant..."
                             value={searchTerm}
-                            onChange={handleSearchChange}
+                            onChange={(e) => setSearchTerm(e.target.value)}
                             className="pl-10 bg-gray-800 border-gray-700 text-white"
                         />
                     </div>
 
                     <div className="flex gap-2">
-                        <Button className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-300">
+                        <Button className="bg-white hover:bg-yellow-600 text-gray-900">
                             <Calendar className="w-4 h-4 mr-2" />
-                            Trie par date
+                            Trier par date
                         </Button>
-                        <Button className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-300">
+                        <Button className="bg-white hover:bg-yellow-600 text-gray-900">
                             <BarChart3 className="w-4 h-4 mr-2" />
-                            Trie par résultat
+                            Trier par résultat
                         </Button>
                     </div>
                 </div>
 
                 {/* Contenu principal */}
                 <div className="grid grid-cols-2 gap-6">
-                    {/* Liste des étudiants (gauche) */}
+                    {/* Liste des étudiants */}
                     <Card className="bg-gray-100 text-gray-900">
                         <CardHeader>
                             <CardTitle className="flex items-center">
@@ -691,13 +540,14 @@ function QuizResultsDetailPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                            {filteredStudents.map((student: Student) => (
+                            {filteredStudents.map(student => (
                                 <div
                                     key={student.id}
-                                    className={`p-4 border rounded-lg cursor-pointer transition-colors ${selectedStudent?.id === student.id
-                                        ? 'bg-blue-100 border-blue-300'
-                                        : 'bg-white border-gray-300 hover:bg-gray-50'
-                                        }`}
+                                    className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                                        selectedStudent?.id === student.id
+                                            ? 'bg-blue-100 border-blue-300'
+                                            : 'bg-white border-gray-300 hover:bg-gray-50'
+                                    }`}
                                     onClick={() => handleStudentSelect(student)}
                                 >
                                     <div className="flex justify-between items-center">
@@ -707,7 +557,7 @@ function QuizResultsDetailPage() {
                                             <p className="text-xs text-gray-500">{student.date}</p>
                                         </div>
                                         <div className="text-right">
-                                            <p className="font-bold text-gray-900">{student.percentage} %</p>
+                                            <p className="font-bold text-gray-900">{student.percentage}%</p>
                                         </div>
                                     </div>
                                 </div>
@@ -715,15 +565,15 @@ function QuizResultsDetailPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Résultats détaillés (droite) */}
+                    {/* Résultats détaillés */}
                     <Card className="bg-gray-100 text-gray-900">
                         <CardHeader>
                             <div className="flex justify-between items-center">
                                 <CardTitle>Résultats Détaillés</CardTitle>
-                                {selectedStudent && studentAnswers && studentAnswers.length > 0 && (
+                                {selectedStudent && studentAnswers.length > 0 && (
                                     <Button
-                                        onClick={() => handleExportStudentResults(selectedStudent)}
-                                        className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-3 py-1 text-sm"
+                                        onClick={handleExportStudentResult}
+                                        className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-3 py-1 text-sm"
                                     >
                                         <Download className="w-4 h-4 mr-1" />
                                         Exporter PDF
@@ -749,15 +599,17 @@ function QuizResultsDetailPage() {
                                         <h4 className="font-semibold mb-2">Détails des réponses</h4>
                                         {studentAnswers.length > 0 ? (
                                             <div className="space-y-3">
-                                                {studentAnswers.map((answer: StudentAnswerDetail, index: number) => (
-                                                    <div key={answer.questionId} className="p-3 border rounded-lg bg-white">
+                                                {studentAnswers.map((answer, index) => (
+                                                    <div key={index} className="p-3 border rounded-lg bg-white">
                                                         <h5 className="font-medium text-gray-900 mb-2">
                                                             Question {index + 1}: {answer.questionText}
                                                         </h5>
                                                         <div className="space-y-1">
                                                             <div className="text-sm">
                                                                 <span className="font-medium">Votre réponse:</span>
-                                                                <span className={`ml-2 ${answer.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                                                                <span className={`ml-2 ${
+                                                                    answer.isCorrect ? 'text-green-600' : 'text-red-600'
+                                                                }`}>
                                                                     {answer.userAnswer}
                                                                 </span>
                                                             </div>
@@ -775,7 +627,7 @@ function QuizResultsDetailPage() {
                                             </div>
                                         ) : (
                                             <p className="text-sm text-gray-600">
-                                                Chargement des détails des réponses...
+                                                Chargement des détails...
                                             </p>
                                         )}
                                     </div>
@@ -787,7 +639,7 @@ function QuizResultsDetailPage() {
                                         Sélectionnez un étudiant
                                     </h3>
                                     <p className="text-sm text-gray-500">
-                                        Cliquez sur un étudiant dans la liste pour voir ses résultats détaillés
+                                        Cliquez sur un étudiant pour voir ses résultats
                                     </p>
                                 </div>
                             )}

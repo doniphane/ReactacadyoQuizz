@@ -6,7 +6,6 @@ import type { Location } from 'react-router-dom';
 import AuthService from '../services/AuthService';
 
 
-
 // Interface pour définir les props du composant ProtectedRoute
 interface ProtectedRouteProps {
     children: ReactNode;
@@ -28,6 +27,7 @@ type AuthenticationStatus = boolean;
 
 // Type pour le statut de vérification des rôles
 type RoleCheckResult = boolean;
+
 
 
 function ProtectedRoute({ 
@@ -65,7 +65,7 @@ function ProtectedRoute({
         }
     }
 
-    // Si toutes les vérifications passent, on affiche le contenu
+
     return <>{children}</>;
 }
 

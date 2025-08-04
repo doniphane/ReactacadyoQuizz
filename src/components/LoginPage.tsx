@@ -1,4 +1,9 @@
-
+// Composant de page de connexion
+// Ce composant affiche un formulaire de connexion avec :
+// - Champs email et mot de passe
+// - Gestion des erreurs
+// - État de chargement
+// - Redirection automatique selon les rôles
 
 import { useState, useEffect } from 'react';
 import type { FormEvent, ChangeEvent } from 'react';
@@ -49,7 +54,9 @@ type ValidationResult = string | null;
 // Type pour les valeurs des champs de formulaire
 type FormFieldValue = string | FormDataEntryValue | null;
 
-
+// =============================================================================
+// COMPOSANT PRINCIPAL
+// =============================================================================
 
 function LoginPage() {
     // État pour stocker les valeurs du formulaire
