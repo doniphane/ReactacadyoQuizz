@@ -36,12 +36,12 @@ interface ValidationErrors {
 // Interface pour les informations du quiz
 interface QuizInfo {
     id: number;
-    title: string;
+    titre: string; // Correspond au champ 'titre' de l'API Symfony
     description?: string;
-    isActive: boolean;
-    isStarted: boolean;
-    uniqueCode: string;
-    passingScore?: number;
+    estActif: boolean; // Correspond au champ 'estActif' de l'API Symfony
+    estDemarre: boolean; // Correspond au champ 'estDemarre' de l'API Symfony
+    codeAcces: string; // Correspond au champ 'codeAcces' de l'API Symfony
+    scorePassage?: number; // Correspond au champ 'scorePassage' de l'API Symfony
     questions?: unknown[];
 }
 
@@ -267,7 +267,7 @@ function StudentPage() {
             }
 
             // Appeler l'API pour vérifier le code du quiz avec authentification
-            const response = await axios.get<QuizInfo>(`${API_BASE_URL}/api/public/quizzes/by-code/${sanitizedData.quizCode}`, {
+            const response = await axios.get<QuizInfo>(`${API_BASE_URL}/api/public/questionnaires/code/${sanitizedData.quizCode}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -275,7 +275,7 @@ function StudentPage() {
             const quizData: QuizInfo = response.data;
 
             // Vérifier que le quiz est actif
-            if (!quizData.isActive) {
+            if (!quizData.estActif) {
                 setGeneralError('Ce quiz n\'est pas actif pour le moment');
                 return;
             }

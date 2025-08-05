@@ -76,12 +76,24 @@ class AuthService {
         // Intercepteur pour ajouter le token à chaque requête
         axios.interceptors.request.use(
             (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
-                const token: JWTToken = this.getToken();
-                if (token) {
-                    
-                    config.headers = config.headers || {};
-                    config.headers.Authorization = `Bearer ${token}`;
+                // Ne pas ajouter le token pour les routes qui ne nécessitent pas d'authentification
+                const publicRoutes: string[] = [
+                    '/api/register',
+                    '/api/login_check'
+                ];
+                
+                const isPublicRoute: boolean = publicRoutes.some(route => 
+                    config.url && config.url.includes(route)
+                );
+                
+                if (!isPublicRoute) {
+                    const token: JWTToken = this.getToken();
+                    if (token) {
+                        config.headers = config.headers || {};
+                        config.headers.Authorization = `Bearer ${token}`;
+                    }
                 }
+                
                 return config;
             },
             (error: unknown): Promise<unknown> => {
@@ -96,7 +108,9 @@ class AuthService {
                 if (error.response && error.response.status === 401) {
                     // Token expiré, on déconnecte l'utilisateur
                     this.logout();
-                    window.location.href = '/login';
+                    // Temporairement désactivé pour le débogage
+                    // window.location.href = '/login';
+                    console.log('🔍 Intercepteur 401: Token expiré mais redirection désactivée pour débogage');
                 }
                 return Promise.reject(error);
             }
