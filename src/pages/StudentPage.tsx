@@ -391,7 +391,7 @@ function StudentPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Champ Prénom */}
                             <div>
-                                <Label htmlFor="first_name" className="text-sm font-medium">
+                                <Label htmlFor="first_name" className="text-sm font-medium ">
                                     Prénom
                                 </Label>
                                 <Input
@@ -400,7 +400,7 @@ function StudentPage() {
                                     type="text"
                                     value={participantData.firstName}
                                     onChange={handleFirstNameChange}
-                                    className={`mt-1 ${validationErrors.firstName ? 'border-red-500' : ''}`}
+                                    className={`mt-1 border-black border-2 ${validationErrors.firstName ? 'border-red-500' : ''}`}
                                     placeholder="Prénom"
                                     maxLength={50}
                                     autoComplete="given-name"
@@ -419,7 +419,7 @@ function StudentPage() {
                                     type="text"
                                     value={participantData.lastName}
                                     onChange={handleLastNameChange}
-                                    className={`mt-1 ${validationErrors.lastName ? 'border-red-500' : ''}`}
+                                    className={`mt-1 border-black border-2 ${validationErrors.lastName ? 'border-red-500' : ''}`}
                                     placeholder="Nom"
                                     maxLength={50}
                                     autoComplete="family-name"
@@ -465,7 +465,7 @@ function StudentPage() {
                                     value={participantData.quizCode}
                                     onChange={handleQuizCodeChange}
                                     placeholder="Entrez le code du quizz"
-                                    className={`mt-1 uppercase ${validationErrors.quizCode ? 'border-red-500' : ''}`}
+                                    className={`mt-1 uppercase border-black border-2 ${validationErrors.quizCode ? 'border-red-500' : ''}`}
                                     maxLength={6}
                                     style={{ textTransform: 'uppercase' }}
                                     autoComplete="off"

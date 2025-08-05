@@ -1,21 +1,19 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
+import { Loader2, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import type { 
+  QuizInfo, 
+  ParticipantData, 
+  Question, 
+  UserAnswers, 
+  QuizSubmissionData,
+  ApiQuestionData,
+  ApiAnswerData
+} from '@/types/TakeQuizPage';
 
 import AuthService from '../services/AuthService';
-import toast from 'react-hot-toast';
-import type { 
-    Question, 
-    UserAnswers, 
-    LocationState, 
-    QuizInfo,
-    ParticipantData,
-    ApiQuestionData,
-    ApiAnswerData,
-    QuizSubmissionData
-} from '../types/TakeQuizPage';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -76,6 +74,18 @@ const useQuizData = (quizInfo: QuizInfo | undefined) => {
       const quizData = await apiCall(`/api/public/questionnaires/${quizInfo.id}`);
       if (!quizData) return;
 
+      // Debug temporaire pour voir les données
+      console.log('Données reçues de l\'API:', quizData);
+      if (quizData.questions) {
+        console.log('Questions reçues:', quizData.questions);
+        quizData.questions.forEach((q: any, index: number) => {
+          console.log(`Question ${index + 1}:`, q);
+          if (q.reponses) {
+            console.log(`  Réponses de la question ${index + 1}:`, q.reponses);
+          }
+        });
+      }
+
       // Transformer les données en une seule étape
       const transformedQuestions: Question[] = (quizData.questions || []).map((questionData: ApiQuestionData) => ({
         id: questionData.id,
@@ -110,9 +120,34 @@ const useQuizNavigation = (questions: Question[]) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [userAnswers, setUserAnswers] = useState<UserAnswers>({});
 
-  const handleAnswerSelect = useCallback((questionId: number, answerId: number) => {
-    setUserAnswers(prev => ({ ...prev, [questionId]: answerId }));
+  // Fonction pour détecter si une question a plusieurs réponses correctes
+  const isMultipleChoiceQuestion = useCallback((question: Question): boolean => {
+    const correctAnswers = question.answers.filter(answer => answer.isCorrect);
+    const isMultiple = correctAnswers.length > 1;
+    
+    return isMultiple;
   }, []);
+
+  const handleAnswerSelect = useCallback((questionId: number, answerId: number) => {
+    setUserAnswers(prev => {
+      const currentAnswers = prev[questionId];
+      const question = questions.find(q => q.id === questionId);
+      
+      if (!question) return prev;
+
+      // Si c'est une question à choix multiples
+      if (isMultipleChoiceQuestion(question)) {
+        const currentArray = Array.isArray(currentAnswers) ? currentAnswers : [];
+        const newAnswers = currentArray.includes(answerId)
+          ? currentArray.filter(id => id !== answerId)
+          : [...currentArray, answerId];
+        return { ...prev, [questionId]: newAnswers };
+      }
+      
+      // Si c'est une question à choix unique
+      return { ...prev, [questionId]: answerId };
+    });
+  }, [questions, isMultipleChoiceQuestion]);
 
   const handleNextQuestion = useCallback(() => {
     if (currentQuestionIndex < questions.length - 1) {
@@ -137,7 +172,8 @@ const useQuizNavigation = (questions: Question[]) => {
     progressPercentage,
     isComplete,
     handleAnswerSelect,
-    handleNextQuestion
+    handleNextQuestion,
+    isMultipleChoiceQuestion
   };
 };
 
@@ -161,11 +197,24 @@ const useQuizSubmission = () => {
     setIsSubmitting(true);
 
     try {
-      // Format des réponses simplifié
-      const formattedAnswers = Object.entries(userAnswers).map(([questionId, answerId]) => ({
-        questionId: parseInt(questionId),
-        answerId: answerId
-      }));
+      // Format des réponses pour supporter les choix multiples
+      const formattedAnswers = Object.entries(userAnswers).map(([questionId, answerIdOrIds]) => {
+        const questionIdNum = parseInt(questionId);
+        
+        // Si c'est un tableau (choix multiples), créer une entrée pour chaque réponse
+        if (Array.isArray(answerIdOrIds)) {
+          return answerIdOrIds.map(answerId => ({
+            questionId: questionIdNum,
+            answerId: answerId
+          }));
+        }
+        
+        // Si c'est un nombre (choix unique)
+        return [{
+          questionId: questionIdNum,
+          answerId: answerIdOrIds as number
+        }];
+      }).flat(); // Aplatir le tableau
 
       const submissionData: QuizSubmissionData = {
         participantFirstName: participantData.firstName,
@@ -202,18 +251,10 @@ const useQuizSubmission = () => {
 function TakeQuizPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  
-  const { participantData, quizInfo } = (location.state as LocationState) || {};
+  const { participantData, quizInfo } = (location.state as { participantData?: ParticipantData; quizInfo?: QuizInfo }) || {};
 
-  // Redirection si pas de données
-  useEffect(() => {
-    if (!participantData || !quizInfo) {
-      navigate('/student');
-    }
-  }, [participantData, quizInfo, navigate]);
-
-  // Hooks personnalisés
-  const { questions, isLoading } = useQuizData(quizInfo);
+  // Hooks doivent être appelés avant les early returns
+  const { questions, isLoading } = useQuizData(quizInfo || undefined);
   const {
     currentQuestionIndex,
     currentQuestion,
@@ -221,26 +262,37 @@ function TakeQuizPage() {
     progressPercentage,
     isComplete,
     handleAnswerSelect,
-    handleNextQuestion
+    handleNextQuestion,
+    isMultipleChoiceQuestion
   } = useQuizNavigation(questions);
   const { isSubmitting, submitQuiz } = useQuizSubmission();
+
+  // Rediriger si pas de données
+  useEffect(() => {
+    if (!participantData || !quizInfo) {
+      navigate('/student');
+    }
+  }, [participantData, quizInfo, navigate]);
 
   // Fonctions de navigation
   const handleBack = useCallback(() => {
     navigate('/student');
   }, [navigate]);
 
-  const handleNext = useCallback(() => {
-    if (currentQuestionIndex < questions.length - 1) {
-      handleNextQuestion();
+  const handleNext = useCallback(async () => {
+    if (currentQuestionIndex === questions.length - 1) {
+      // Dernière question, soumettre le quiz
+      if (quizInfo && participantData) {
+        await submitQuiz(quizInfo, participantData, userAnswers, questions);
+      }
     } else {
-      submitQuiz(quizInfo!, participantData!, userAnswers, questions);
+      // Question suivante
+      handleNextQuestion();
     }
-  }, [currentQuestionIndex, questions.length, handleNextQuestion, submitQuiz, quizInfo, participantData, userAnswers, questions]);
+  }, [currentQuestionIndex, questions.length, submitQuiz, quizInfo, participantData, userAnswers, handleNextQuestion]);
 
-  // Condition de validation du bouton suivant
-  const canProceed = currentQuestion && userAnswers[currentQuestion.id];
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
+  const canProceed = currentQuestion && userAnswers[currentQuestion.id] !== undefined;
 
   // Affichage de chargement
   if (isLoading) {
@@ -248,17 +300,31 @@ function TakeQuizPage() {
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-yellow-400" />
-          <div className="text-xl">Chargement des questions...</div>
+          <div className="text-xl">Chargement du quiz...</div>
         </div>
       </div>
     );
   }
 
-  // Si pas de questions
-  if (questions.length === 0) {
+  // Affichage si pas de données
+  if (!participantData || !quizInfo) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
         <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Données manquantes</h1>
+          <Button onClick={() => navigate('/student')} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900">
+            Retour à l'accueil
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Affichage si pas de questions
+  if (!questions || questions.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white p-6">
+        <div className="max-w-4xl mx-auto text-center">
           <div className="text-xl mb-4">Aucune question disponible pour ce quiz.</div>
           <Button onClick={handleBack} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900">
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -293,31 +359,56 @@ function TakeQuizPage() {
 
       {/* Contenu principal */}
       <div className="max-w-4xl mx-auto">
-        <Card className="bg-gray-100 text-gray-900">
-          <CardContent className="p-0">
-            {/* Section question */}
-            <div className="bg-yellow-500 p-6 rounded-t-lg">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                {currentQuestion.text}
-              </h2>
-              <p className="text-gray-800">
-                Choisissez une réponse
-              </p>
-            </div>
+        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+          {/* Section question */}
+          <div className="bg-yellow-500 p-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              {currentQuestion.text}
+            </h2>
+            <p className="text-gray-800">
+              {isMultipleChoiceQuestion(currentQuestion) 
+                ? "Choisissez une ou plusieurs réponses possibles" 
+                : "Choisissez une réponse"
+              }
+            </p>
+            {isMultipleChoiceQuestion(currentQuestion) && (
+              <div className="mt-3 p-3 bg-yellow-400 rounded-lg text-gray-800 text-sm border-2 border-yellow-600">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">⚠️</span>
+                  <strong>Question à choix multiples</strong>
+                </div>
+                <p className="text-xs">
+                  <strong>Règle de scoring :</strong> Vous devez sélectionner TOUTES les bonnes réponses 
+                  (et aucune mauvaise) pour obtenir le point. Sinon, la question est comptée comme fausse.
+                </p>
+              </div>
+            )}
+          </div>
 
-            {/* Section réponses */}
-            <div className="bg-gray-50 p-6 rounded-b-lg">
-              <div className="space-y-4">
-                {currentQuestion.answers
-                  .sort((a, b) => a.orderNumber - b.orderNumber)
-                  .map((answer) => (
+          {/* Section réponses */}
+          <div className="bg-gray-50 p-6">
+            <div className="space-y-4">
+              {currentQuestion.answers
+                .sort((a, b) => a.orderNumber - b.orderNumber)
+                .map((answer) => {
+                  const isMultipleChoice = isMultipleChoiceQuestion(currentQuestion);
+                  const currentAnswers = userAnswers[currentQuestion.id];
+                  
+                  // Déterminer si cette réponse est sélectionnée
+                  const isSelected = isMultipleChoice 
+                    ? Array.isArray(currentAnswers) 
+                      ? currentAnswers.includes(answer.id)
+                      : false
+                    : currentAnswers === answer.id;
+
+                  return (
                     <div key={answer.id} className="flex items-center">
                       <input
-                        type="radio"
-                        name={`question_${currentQuestion.id}`}
+                        type={isMultipleChoice ? "checkbox" : "radio"}
+                        name={isMultipleChoice ? `question_${currentQuestion.id}_checkbox` : `question_${currentQuestion.id}`}
                         id={`answer_${answer.id}`}
                         value={answer.id}
-                        checked={userAnswers[currentQuestion.id] === answer.id}
+                        checked={isSelected}
                         onChange={() => handleAnswerSelect(currentQuestion.id, answer.id)}
                         className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500"
                       />
@@ -328,11 +419,11 @@ function TakeQuizPage() {
                         {answer.text}
                       </label>
                     </div>
-                  ))}
-              </div>
+                  );
+                })}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Bouton Suivant/Terminer */}
         <div className="flex justify-end mt-6">

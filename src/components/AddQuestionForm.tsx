@@ -32,7 +32,8 @@ function AddQuestionForm({ quizId, currentQuestionsCount, onSubmit, isSubmitting
         formState: { errors },
         setError,
         clearErrors,
-        reset
+        reset,
+        watch
     } = useForm<AddQuestionFormData>({
         resolver: zodResolver(addQuestionFormSchema),
         mode: 'onChange',
@@ -156,6 +157,26 @@ function AddQuestionForm({ quizId, currentQuestionsCount, onSubmit, isSubmitting
                         <Label className="text-sm font-medium">
                             Réponses <span className="text-red-500">*</span>
                         </Label>
+                        
+                        {/* Indication pour les choix multiples */}
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="text-blue-600">💡</span>
+                                <span className="text-sm font-medium text-blue-800">Question à choix multiples</span>
+                            </div>
+                            <p className="text-xs text-blue-700">
+                                Cochez plusieurs réponses comme "correctes" pour créer une question à choix multiples. 
+                                L'étudiant devra sélectionner TOUTES les bonnes réponses pour obtenir le point.
+                            </p>
+                            {watch('answers') && (
+                                <div className="mt-2 text-xs">
+                                    <span className="text-blue-600">
+                                        Réponses correctes sélectionnées : {watch('answers')?.filter(a => a.correct).length || 0}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                        
                         <div className="space-y-3">
                             {fields.map((field, index) => (
                                 <div

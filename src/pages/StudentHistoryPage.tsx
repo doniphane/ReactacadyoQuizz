@@ -7,9 +7,36 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { AttemptsList, AttemptDetails, SearchBar } from '../components';
 import AuthService from '../services/AuthService';
 import toast from 'react-hot-toast';
-import type { TransformedAttempt, AttemptDetail, UserAnswer, Question, Answer, Questionnaire } from '../types/studenthistory';
+import type { TransformedAttempt, AttemptDetail } from '../types/studenthistory';
 
 const API_BASE_URL = 'http://localhost:8000';
+
+// Interface pour les données reçues de l'API /api/user/my-attempts
+interface ApiAttempt {
+  id: number;
+  questionnaireTitre: string;
+  questionnaireCode: string;
+  date: string;
+  heure: string;
+  score: number;
+  nombreTotalQuestions: number;
+  pourcentage: number;
+  estReussi: boolean;
+}
+
+// Interface pour les détails d'une tentative
+interface ApiAttemptDetail {
+  questionId: string;
+  questionTexte: string;
+  reponseUtilisateurTexte: string;
+  reponseCorrecteTexte: string;
+  estCorrecte: boolean;
+}
+
+// Interface pour la réponse de l'API /api/user/my-attempts/{id}
+interface ApiAttemptDetailResponse {
+  reponsesDetails: ApiAttemptDetail[];
+}
 
 // Hook API unifié
 const useApi = () => {
@@ -59,58 +86,40 @@ const useQuizHistory = () => {
       setIsLoading(true);
       setError(null);
 
-      // Récupérer utilisateur et tentatives en parallèle
-      const [currentUser, attemptsArray] = await Promise.all([
-        apiCall('/api/me'),
-        apiCall('/api/tentative_questionnaires')
-      ]);
+      // Utiliser le nouvel endpoint qui filtre directement les tentatives de l'utilisateur connecté
+      const attemptsArray = await apiCall('/api/user/my-attempts') as ApiAttempt[];
+      
+      if (!attemptsArray) {
+        setQuizAttempts([]);
+        return;
+      }
 
-      if (!currentUser || !attemptsArray) return;
-
-      // Transformer les tentatives avec détails questionnaire
-      const transformedAttempts = await Promise.all(
-        attemptsArray.map(async (attempt: TransformedAttempt) => {
-          try {
-            const questionnaireId = attempt.questionnaire.split('/').pop();
-            const questionnaire = await apiCall(`/api/questionnaires/${questionnaireId}`) as Questionnaire;
-            
-            const percentage = attempt.nombreTotalQuestions && attempt.score 
-              ? Math.round((attempt.score / attempt.nombreTotalQuestions) * 100) 
-              : 0;
-            
-            const isPassed = percentage >= (questionnaire?.scorePassage || 70);
-            const dateDebut = new Date(attempt.dateDebut);
-            
-            return {
-              ...attempt,
-              quizTitle: questionnaire?.title || `${attempt.prenomParticipant} ${attempt.nomParticipant}`,
-              quizCode: questionnaire?.accessCode || 'N/A',
-              date: dateDebut.toLocaleDateString('fr-FR'),
-              time: dateDebut.toLocaleTimeString('fr-FR', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              }),
-              percentage,
-              isPassed
-            };
-          } catch {
-            // Fallback si erreur questionnaire
-            const dateDebut = new Date(attempt.dateDebut);
-            return {
-              ...attempt,
-              quizTitle: `${attempt.prenomParticipant} ${attempt.nomParticipant}`,
-              quizCode: 'N/A',
-              date: dateDebut.toLocaleDateString('fr-FR'),
-              time: dateDebut.toLocaleTimeString('fr-FR', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              }),
-              percentage: 0,
-              isPassed: false
-            };
-          }
-        })
-      );
+      // Transformer les données reçues de l'endpoint /api/user/my-attempts
+      const transformedAttempts: TransformedAttempt[] = attemptsArray.map((attempt: ApiAttempt) => {
+        const dateDebut = new Date(attempt.date);
+        
+        return {
+          id: attempt.id,
+          prenomParticipant: 'Utilisateur',
+          nomParticipant: 'Connecté',
+          dateDebut: attempt.date,
+          dateFin: undefined,
+          score: attempt.score,
+          nombreTotalQuestions: attempt.nombreTotalQuestions,
+          questionnaire: `/api/questionnaires/${attempt.id}`,
+          utilisateur: `/api/utilisateurs/current`,
+          // Champs calculés pour l'affichage
+          quizTitle: attempt.questionnaireTitre || 'Quiz sans titre',
+          quizCode: attempt.questionnaireCode || 'N/A',
+          date: dateDebut.toLocaleDateString('fr-FR'),
+          time: dateDebut.toLocaleTimeString('fr-FR', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          }),
+          percentage: attempt.pourcentage || 0,
+          isPassed: attempt.estReussi || false
+        };
+      });
       
       setQuizAttempts(transformedAttempts);
     } catch (error) {
@@ -140,59 +149,28 @@ const useAttemptDetails = () => {
       setLoadingDetails(true);
       setSelectedAttempt(attempt);
 
-      // Récupérer les réponses utilisateur pour cette tentative
-      const userAnswersArray = await apiCall('/api/reponse_utilisateurs');
-      if (!userAnswersArray) return;
+      // Utiliser le nouvel endpoint pour récupérer les détails d'une tentative spécifique
+      const attemptDetail = await apiCall(`/api/user/my-attempts/${attempt.id}`) as ApiAttemptDetailResponse;
+      
+      if (!attemptDetail || !attemptDetail.reponsesDetails) {
+        setAttemptDetails([]);
+        return;
+      }
 
-      const studentAnswers = userAnswersArray.filter((answer: UserAnswer) => 
-        answer.tentativeQuestionnaire === `/api/tentative_questionnaires/${attempt.id}`
-      );
-
-      // Traiter les détails en parallèle
-      const details = await Promise.all(
-        studentAnswers.map(async (userAnswer: UserAnswer): Promise<AttemptDetail> => {
-          try {
-            const questionId = userAnswer.question?.split('/').pop() || '0';
-            const answerId = userAnswer.reponse?.split('/').pop() || '0';
-
-            // Récupérer question, réponse sélectionnée et toutes les réponses en parallèle
-            const [questionData, selectedAnswerData, allAnswersData] = await Promise.all([
-              apiCall(`/api/questions/${questionId}`),
-              apiCall(`/api/reponses/${answerId}`),
-              apiCall(`/api/reponses?question=${questionId}`)
-            ]);
-
-            // Typer les données reçues de l'API
-            const question = questionData as Question;
-            const selectedAnswer = selectedAnswerData as Answer;
-            const allAnswers = allAnswersData as Answer[];
-
-            const correctAnswer = allAnswers?.find((a: Answer) => a.correct === true);
-
-            return {
-              questionId,
-              questionText: question?.texte || 'Question non trouvée',
-              userAnswer: selectedAnswer?.texte || 'Réponse non trouvée',
-              correctAnswer: correctAnswer?.texte || 'Réponse correcte non trouvée',
-              isCorrect: selectedAnswer?.correct || false
-            };
-          } catch (error) {
-            console.error('Erreur détail réponse:', error);
-            return {
-              questionId: '0',
-              questionText: 'Question non trouvée',
-              userAnswer: 'Réponse non trouvée',
-              correctAnswer: 'Réponse correcte non trouvée',
-              isCorrect: false
-            };
-          }
-        })
-      );
+      // Transformer les détails reçus de l'API
+      const details: AttemptDetail[] = attemptDetail.reponsesDetails.map((detail: ApiAttemptDetail) => ({
+        questionId: detail.questionId,
+        questionText: detail.questionTexte,
+        userAnswer: detail.reponseUtilisateurTexte,
+        correctAnswer: detail.reponseCorrecteTexte,
+        isCorrect: detail.estCorrecte
+      }));
 
       setAttemptDetails(details);
     } catch (error) {
       console.error('Erreur lors de la récupération des détails:', error);
       toast.error('Erreur lors du chargement des détails');
+      setAttemptDetails([]);
     } finally {
       setLoadingDetails(false);
     }

@@ -55,8 +55,9 @@ export interface QuizData {
     scorePassage?: number; // Correspond au champ 'scorePassage' de l'API Symfony
 }
 
-// Type pour les réponses utilisateur (questionId -> answerId)
-export type UserAnswers = Record<number, number>;
+// Type pour les réponses utilisateur (questionId -> answerId ou answerIds[])
+// Supporte les questions à choix unique (number) et choix multiples (number[])
+export type UserAnswers = Record<number, number | number[]>;
 
 // Interface pour l'état de navigation passé depuis la page précédente
 export interface LocationState {
@@ -98,6 +99,6 @@ export interface QuizSubmissionData {
     participantLastName: string;
     answers: Array<{
         questionId: number;
-        answerId: number;
+        answerId: number | number[]; // Supporte les choix uniques et multiples
     }>;
 } 
