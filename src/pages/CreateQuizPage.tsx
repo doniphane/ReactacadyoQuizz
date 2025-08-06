@@ -1,4 +1,5 @@
 import { useForm } from 'react-hook-form';
+import type { SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from 'react-router-dom';
 import { useCallback } from 'react';
@@ -22,7 +23,7 @@ import type {
 } from '../types/createquiz';
 import { createQuizFormSchema } from '../types/createquiz';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 function CreateQuizPage() {
     const navigate = useNavigate();
@@ -53,7 +54,7 @@ function CreateQuizPage() {
         setError(field, { type: 'manual', message });
     }, [setError]);
 
-    const onSubmit = useCallback(async (data: CreateQuizFormData): Promise<void> => {
+    const onSubmit: SubmitHandler<CreateQuizFormData> = useCallback(async (data) => {
         clearErrors();
 
         try {
@@ -149,7 +150,7 @@ function CreateQuizPage() {
                         <CardTitle className="text-xl font-bold">Créer un nouveau quiz</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                        <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="title" className="text-sm font-medium">
                                     Titre du quiz <span className="text-red-500">*</span>

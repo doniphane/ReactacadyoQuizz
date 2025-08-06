@@ -9,7 +9,7 @@ import AuthService from '../services/AuthService';
 import { QuizMetrics, StudentsList, StudentResultsDetail, exportAllResultsPDF, exportStudentResultPDF } from '../components';
 import type { Student, AnswerDetail, Metrics, QuizResultsNavigationState, QuizAttempt, QuizQuestion, QuizAnswer, UserAnswer } from '../types/quizresultdetail';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // Hook personnalisé pour les appels API
 const useApi = () => {

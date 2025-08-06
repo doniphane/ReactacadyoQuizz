@@ -1,5 +1,4 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState, useCallback } from 'react';
 
 import {
     LoginPage,
@@ -14,24 +13,9 @@ import {
     StudentHistoryPage
 } from './pages';
 
-import { ProtectedRoute, AuthProvider, Layout, LoadingScreen } from './components';
+import { ProtectedRoute, AuthProvider, Layout } from './components';
 
 function App() {
-  const [isLoading, setIsLoading] = useState(true);
-
-  const checkAuth = useCallback(() => {
-    setIsLoading(false);
-  }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(checkAuth, 100);
-    return () => clearTimeout(timer);
-  }, [checkAuth]);
-
-  if (isLoading) {
-    return <LoadingScreen />;
-  }
-
   return (
     <Router>
       <AuthProvider>

@@ -129,7 +129,7 @@ const ValidationUtils = {
 
 
 // URL de base de l'API Symfony
-const API_BASE_URL: string = 'http://localhost:8000';
+const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL;
 
 function StudentPage() {
     // Hook pour la navigation entre les pages

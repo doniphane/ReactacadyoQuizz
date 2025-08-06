@@ -37,7 +37,7 @@ import type {
 } from "../types/admin";
 
 // URL de l'API
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 function AdminPage() {
   const navigate = useNavigate();

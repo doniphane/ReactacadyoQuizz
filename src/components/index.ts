@@ -1,7 +1,6 @@
-
 // Composants de routage et authentification
 export { default as ProtectedRoute } from './ProtectedRoute';
-export { AuthProvider } from './AuthProvider';
+export { default as AuthProvider } from './AuthProvider';
 
 // Composants de dashboard admin
 export { default as ListeQuiz } from './ListeQuiz';

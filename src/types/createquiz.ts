@@ -1,5 +1,3 @@
-
-
 // Import de Zod pour la validation
 import { z } from 'zod';
 
@@ -56,10 +54,10 @@ export const createQuizFormSchema = z.object({
     // Validation de la description
     description: z
         .string()
+        .min(1, 'La description est obligatoire')
         .max(500, 'La description ne peut pas dépasser 500 caractères')
-        .default('')
 });
 
 // Type TypeScript inféré à partir du schéma Zod
 // Ce type représente la structure des données du formulaire après validation
-export type CreateQuizFormData = z.infer<typeof createQuizFormSchema>; 
+export type CreateQuizFormData = z.infer<typeof createQuizFormSchema>;
