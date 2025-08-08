@@ -238,23 +238,23 @@ function QuizResultsDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 sm:mb-8">
           <Button
             onClick={() => navigate('/admin')}
-            className="bg-yellow-500 hover:bg-yellow-600 text-gray-900"
+            className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 mb-4 sm:mb-0"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Retour à l'accueil
           </Button>
 
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-yellow-400 mb-2">
+          <div className="text-center sm:text-left">
+            <h1 className="text-2xl sm:text-4xl font-bold text-yellow-400 mb-2">
               {quizTitle || 'Quiz'}
             </h1>
-            <p className="text-gray-300">
+            <p className="text-sm sm:text-base text-gray-300">
               Code: {quizCode || 'QUIZ01'} • {metrics.totalStudents} participants
             </p>
           </div>
@@ -272,24 +272,24 @@ function QuizResultsDetailPage() {
         <QuizMetrics metrics={metrics} />
 
         {/* Recherche */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-4 sm:mb-6 gap-4">
+          <div className="relative flex-1 max-w-full sm:max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
               type="text"
               placeholder="Rechercher un étudiant..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-gray-800 border-gray-700 text-white"
+              className="pl-10 bg-gray-800 border-gray-700 text-white w-full"
             />
           </div>
 
-          <div className="flex gap-2">
-            <Button className="bg-white hover:bg-yellow-600 text-gray-900">
+          <div className="flex flex-wrap gap-2">
+            <Button className="bg-white hover:bg-yellow-600 text-gray-900 flex-1 sm:flex-none">
               <Calendar className="w-4 h-4 mr-2" />
               Trier par date
             </Button>
-            <Button className="bg-white hover:bg-yellow-600 text-gray-900">
+            <Button className="bg-white hover:bg-yellow-600 text-gray-900 flex-1 sm:flex-none">
               <BarChart3 className="w-4 h-4 mr-2" />
               Trier par résultat
             </Button>
@@ -297,7 +297,7 @@ function QuizResultsDetailPage() {
         </div>
 
         {/* Contenu principal */}
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
           <StudentsList 
             students={filteredStudents}
             selectedStudent={selectedStudent}

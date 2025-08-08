@@ -1,5 +1,3 @@
-
-
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
@@ -40,7 +38,8 @@ function LoginPage() {
         register,
         handleSubmit,
         formState: { errors, isSubmitting },
-        clearErrors
+        clearErrors,
+        setError
     } = useForm<LoginFormData>({
         resolver: zodResolver(loginFormSchema),
         mode: 'onChange' // Valide à chaque changement
@@ -65,71 +64,68 @@ function LoginPage() {
     // - ROLE_USER → /student
     // - Autres rôles → /student (par défaut)
     const onSubmit = async (data: LoginFormData): Promise<void> => {
-        // Réinitialise les messages d'erreur
         clearError();
         clearErrors();
 
         try {
-            // Utilise le store pour la connexion avec les données validées
             const success = await login(data.email, data.password);
 
             if (success) {
-                // === LOGIQUE DE REDIRECTION AMÉLIORÉE ===
-                
-                // Récupère l'URL d'origine depuis le state de navigation
                 const fromLocation: Location | string | undefined = location.state?.from;
-                
+
                 if (fromLocation) {
-                    // Si l'utilisateur venait d'une page spécifique, on l'y renvoie
-                    // MAIS on vérifie d'abord si l'utilisateur a le bon rôle pour cette page
                     let targetPath: string;
-                    
+
                     if (typeof fromLocation === 'string') {
                         targetPath = fromLocation;
                     } else {
                         const locationObj = fromLocation as Location;
                         targetPath = locationObj.pathname + locationObj.search;
                     }
-                    
-                    // Vérifie si la page de destination nécessite un rôle spécifique
-                    // et si l'utilisateur a ce rôle
+
                     if (targetPath.startsWith('/admin') && !isAdmin()) {
-                        // L'utilisateur n'a pas le rôle admin, on le redirige vers sa page par défaut
                         if (isStudent()) {
                             navigate('/student', { replace: true });
                         } else {
                             navigate('/student', { replace: true });
                         }
                     } else if (targetPath.startsWith('/student') && !isStudent() && !isAdmin()) {
-                        // L'utilisateur n'a pas le rôle étudiant, on le redirige vers sa page par défaut
                         if (isAdmin()) {
                             navigate('/admin', { replace: true });
                         } else {
                             navigate('/student', { replace: true });
                         }
                     } else {
-                        // L'utilisateur a le bon rôle, on peut le rediriger vers la page demandée
                         navigate(targetPath, { replace: true });
                     }
                 } else {
-                    // === LOGIQUE DE REDIRECTION PAR RÔLE (par défaut) ===
-                    
-                    // Vérifie d'abord si l'utilisateur est admin
                     if (isAdmin()) {
                         navigate('/admin');
-                    } 
-                    // Vérifie ensuite si l'utilisateur est un étudiant (ROLE_USER)
-                    else if (isStudent()) {
+                    } else if (isStudent()) {
                         navigate('/student');
-                    } 
-                    // Par défaut, redirige vers la page étudiant pour les autres rôles
-                    else {
+                    } else {
                         navigate('/student');
                     }
                 }
             }
-        } catch {
-            // Le store gère déjà les erreurs
+        } catch (err) {
+            const error = err as { response?: { status: number } };
+            if (error.response) {
+                const status = error.response.status;
+                if (status === 401) {
+                    clearError();
+                    setError('email', { type: 'manual', message: 'Identifiants incorrects. Veuillez réessayer.' });
+                } else if (status === 500) {
+                    clearError();
+                    setError('email', { type: 'manual', message: 'Erreur interne du serveur. Veuillez réessayer plus tard.' });
+                } else {
+                    clearError();
+                    setError('email', { type: 'manual', message: `Erreur inattendue : ${status}. Veuillez contacter le support.` });
+                }
+            } else {
+                clearError();
+                setError('email', { type: 'manual', message: 'Erreur réseau. Veuillez vérifier votre connexion.' });
+            }
         }
     };
 

@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 // Import des icônes Lucide React
-import { LogOut, AlertCircle, User, BookOpen, History } from 'lucide-react';
+import { LogOut, AlertCircle, User, BookOpen, History, Menu, X } from 'lucide-react';
 
 // Import du service d'authentification
 import AuthService from '../services/AuthService';
@@ -153,6 +153,9 @@ function StudentPage() {
 
     // État pour l'erreur générale
     const [generalError, setGeneralError] = useState<string>('');
+
+    // État pour gérer l'ouverture du menu mobile
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     // Fonction pour valider un champ spécifique
     const validateField = (field: keyof ParticipantData, value: string): string | null => {
@@ -344,6 +347,11 @@ function StudentPage() {
         );
     };
 
+    // Fonction pour basculer le menu mobile
+    const toggleMobileMenu = () => {
+        setIsMobileMenuOpen(!isMobileMenuOpen);
+    };
+
     return (
         <div className="min-h-screen bg-gray-900 text-white p-6">
             {/* Header Section */}
@@ -358,8 +366,18 @@ function StudentPage() {
                     </p>
                 </div>
 
-                {/* Boutons d'action */}
-                <div className="flex gap-3">
+                {/* Bouton hamburger pour mobile */}
+                <div className="md:hidden">
+                    <button
+                        onClick={toggleMobileMenu}
+                        className="text-white focus:outline-none"
+                    >
+                        {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                    </button>
+                </div>
+
+                {/* Boutons d'action pour desktop */}
+                <div className="hidden md:flex gap-3">
                     <Button
                         onClick={handleNavigateToHistory}
                         className="bg-white hover:bg-yellow-600 text-gray-900 px-6 py-3"
@@ -376,6 +394,26 @@ function StudentPage() {
                     </Button>
                 </div>
             </div>
+
+            {/* Menu mobile */}
+            {isMobileMenuOpen && (
+                <div className="md:hidden bg-gray-800 p-4 rounded-lg space-y-4">
+                    <Button
+                        onClick={handleNavigateToHistory}
+                        className="w-full bg-white hover:bg-yellow-600 text-gray-900 px-6 py-3"
+                    >
+                        <History className="w-4 h-4 mr-2" />
+                        Mon Historique
+                    </Button>
+                    <Button
+                        onClick={handleLogout}
+                        className="w-full bg-white hover:bg-yellow-600 text-gray-900 px-6 py-3"
+                    >
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Déconnexion
+                    </Button>
+                </div>
+            )}
 
             {/* Section principale */}
             <div className="max-w-2xl mx-auto space-y-6">

@@ -39,7 +39,7 @@ export interface QuizCreateError {
 }
 
 // Schéma de validation Zod pour le formulaire de création de quiz
-// Ce schéma définit les règles de validation pour le titre et la description
+
 export const createQuizFormSchema = z.object({
     // Validation du titre
     title: z
@@ -59,5 +59,5 @@ export const createQuizFormSchema = z.object({
 });
 
 // Type TypeScript inféré à partir du schéma Zod
-// Ce type représente la structure des données du formulaire après validation
+
 export type CreateQuizFormData = z.infer<typeof createQuizFormSchema>;

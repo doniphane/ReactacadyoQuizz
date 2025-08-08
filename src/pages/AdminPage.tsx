@@ -17,6 +17,8 @@ import {
   Plus,
   LogOut,
   User,
+  Menu,
+  X
 } from "lucide-react";
 
 // Import des services et utilitaires
@@ -53,6 +55,9 @@ function AdminPage() {
     totalAttempts: 0,
     registeredUsers: 15, 
   });
+
+  // État pour gérer l'ouverture du menu mobile
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Fonction pour obtenir le token
   const getToken = useCallback((): string | null => {
@@ -226,20 +231,36 @@ function AdminPage() {
     fetchQuizzes();
   }, [fetchQuizzes]);
 
+  // Fonction pour basculer le menu mobile
+  const toggleMobileMenu = () => {
+    setIsMobileMenuOpen(!isMobileMenuOpen);
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
       {/* Header */}
       <div className="flex justify-between items-start mb-8">
         <div>
-          <h1 className="text-4xl font-bold text-yellow-400 mb-2">
+          <h1 className="text-3xl md:text-4xl font-bold text-yellow-400 mb-2">
             Dashboard Admin
           </h1>
-          <p className="text-gray-300 text-lg">
+          <p className="text-sm md:text-lg text-gray-300">
             Gérez vos quiz et analysez les performances
           </p>
         </div>
 
-        <div className="flex gap-4">
+        {/* Bouton hamburger pour mobile */}
+        <div className="md:hidden">
+          <button
+            onClick={toggleMobileMenu}
+            className="text-white focus:outline-none"
+          >
+            {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        </div>
+
+        {/* Boutons d'action pour desktop */}
+        <div className="hidden md:flex gap-4">
           <Button
             onClick={() => navigate("/create-quiz")}
             className="bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 px-6 py-3"
@@ -263,6 +284,33 @@ function AdminPage() {
           </Button>
         </div>
       </div>
+
+      {/* Menu mobile */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden bg-gray-800 p-4 rounded-lg space-y-4">
+          <Button
+            onClick={() => navigate("/create-quiz")}
+            className="w-full bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 px-6 py-3"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Créer un quiz
+          </Button>
+          <Button
+            onClick={() => navigate("/student")}
+            className="w-full bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 px-6 py-3"
+          >
+            <User className="w-4 h-4 mr-2" />
+            Espace Élève
+          </Button>
+          <Button
+            onClick={handleLogout}
+            className="w-full bg-white hover:bg-gray-100 text-gray-900 border border-gray-300 px-6 py-3"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Déconnexion
+          </Button>
+        </div>
+      )}
 
       {/* Métriques */}
       <MetricsDashboard metrics={metrics} />
